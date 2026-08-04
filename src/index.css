@@ -1,0 +1,138 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+/* ---- Allotment Overrides ---- */
+.split-view-container {
+  --separator-border: transparent;
+  --focus-border: #007acc;
+}
+
+.split-view-view {
+  overflow: hidden !important;
+}
+
+/* VS Code-style split sash */
+.sash-container {
+  background: #e5e5e5;
+  transition: background 0.15s;
+}
+.sash-container:hover,
+.sash-container.active {
+  background: #007acc;
+}
+
+/* ---- Scrollbar Styling ---- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* ---- Markdown Content Styles ---- */
+.markdown-body {
+  @apply text-gray-800 leading-relaxed;
+  font-size: 15px;
+}
+
+.markdown-body h1 {
+  @apply text-2xl font-bold mt-8 mb-4 pb-2 border-b border-gray-200;
+}
+
+.markdown-body h2 {
+  @apply text-xl font-semibold mt-6 mb-3 pb-1 border-b border-gray-100;
+}
+
+.markdown-body h3 {
+  @apply text-lg font-semibold mt-5 mb-2;
+}
+
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  @apply text-base font-semibold mt-4 mb-2;
+}
+
+.markdown-body p {
+  @apply my-3;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  @apply my-3 pl-6;
+}
+
+.markdown-body li {
+  @apply my-1;
+}
+
+.markdown-body blockquote {
+  @apply border-l-4 border-blue-400 pl-4 my-4 text-gray-600 italic;
+}
+
+.markdown-body a {
+  @apply text-blue-600 hover:text-blue-800 underline;
+}
+
+.markdown-body table {
+  @apply w-full border-collapse my-4;
+}
+
+.markdown-body th {
+  @apply bg-gray-100 border border-gray-300 px-3 py-2 text-left font-semibold;
+}
+
+.markdown-body td {
+  @apply border border-gray-300 px-3 py-2;
+}
+
+.markdown-body tr:nth-child(even) {
+  @apply bg-gray-50;
+}
+
+.markdown-body hr {
+  @apply my-6 border-gray-300;
+}
+
+.markdown-body img {
+  @apply max-w-full rounded my-4;
+}
+
+/* Inline code */
+.markdown-body code:not(pre code) {
+  @apply bg-gray-100 text-pink-600 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+/* Code block container */
+.markdown-body pre {
+  @apply my-4 rounded-lg overflow-hidden;
+}
+
+/* Task list styling */
+.markdown-body input[type="checkbox"] {
+  @apply mr-2;
+}
+
+.markdown-body ul:has(input[type="checkbox"]) {
+  @apply list-none pl-0;
+}
+
+.markdown-body ul:has(input[type="checkbox"]) li {
+  @apply pl-0;
+}
