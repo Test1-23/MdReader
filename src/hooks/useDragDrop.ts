@@ -73,8 +73,9 @@ export function useDragDrop() {
           filePath = ''
           const text = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader()
-            reader.onload = () => resolve(reader.result as string)
-            reader.onerror = () => reject(new Error('Failed to read file'))
+            const timeout = setTimeout(() => reject(new Error('File read timed out')), 30000)
+            reader.onload = () => { clearTimeout(timeout); resolve(reader.result as string) }
+            reader.onerror = () => { clearTimeout(timeout); reject(new Error('Failed to read file')) }
             reader.readAsText(file)
           })
           content = text
@@ -96,7 +97,7 @@ export function useDragDrop() {
           headings,
         }
 
-        dispatch({ type: 'OPEN_FILE', payload: openFile })
+        dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` } })
       } catch (err) {
         dispatch({ type: 'SET_ERROR', payload: 'Failed to read the dropped file.' })
       }

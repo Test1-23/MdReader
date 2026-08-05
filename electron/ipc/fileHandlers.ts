@@ -1,6 +1,6 @@
 import { IpcMain } from 'electron'
 import { readFile, readdir, stat } from 'fs/promises'
-import { extname } from 'path'
+import { extname, join } from 'path'
 
 interface FileDirEntry {
   name: string
@@ -21,7 +21,8 @@ export function registerFileHandlers(ipcMain: IpcMain) {
         lastModified: stats.mtimeMs,
       }
     } catch (error) {
-      throw new Error(`Failed to read file: ${filePath}`)
+      const msg = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to read file: ${filePath} — ${msg}`)
     }
   })
 
@@ -40,7 +41,7 @@ export function registerFileHandlers(ipcMain: IpcMain) {
         })
         .map((entry) => ({
           name: entry.name,
-          path: `${dirPath}\\${entry.name}`,
+          path: join(dirPath, entry.name),
           isDirectory: entry.isDirectory(),
           isFile: entry.isFile(),
           extension: entry.isFile() ? extname(entry.name).toLowerCase() : '',
@@ -66,7 +67,8 @@ export function registerFileHandlers(ipcMain: IpcMain) {
         size: stats.size,
         lastModified: stats.mtimeMs,
       }
-    } catch {
+    } catch (error) {
+      console.error(`getFileInfo failed for ${filePath}:`, error)
       return null
     }
   })

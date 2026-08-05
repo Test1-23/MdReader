@@ -34,6 +34,7 @@ export function FileTreePanel() {
 
       setExpandedDirs(new Set())
     } catch (err) {
+      dispatch({ type: 'SET_SIDEBAR_LOADING', payload: false })
       dispatch({ type: 'SET_ERROR', payload: 'Failed to open folder.' })
     }
   }, [openFolderDialog, readDir, dispatch])
@@ -65,6 +66,7 @@ export function FileTreePanel() {
           }))
           dispatch({ type: 'SET_CHILDREN', payload: { parentPath: node.path, children } })
         } catch {
+          dispatch({ type: 'SET_SIDEBAR_LOADING', payload: false })
           dispatch({ type: 'SET_ERROR', payload: `Failed to read directory: ${node.name}` })
         }
       }
@@ -88,7 +90,7 @@ export function FileTreePanel() {
         headings,
       }
 
-      dispatch({ type: 'OPEN_FILE', payload: openFile })
+      dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` } })
     } catch {
       dispatch({ type: 'SET_ERROR', payload: `Failed to open file: ${filePath}` })
     }

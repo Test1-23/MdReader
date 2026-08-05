@@ -13,6 +13,7 @@ import {
   getActiveTab,
   findGroup,
   findGroupContainingTab,
+  transformNode,
 } from '../utils/layout'
 
 // ---- Initial State ----
@@ -32,17 +33,6 @@ const initialState: AppState = {
 }
 
 // ---- Helpers ----
-
-function replaceGroup(root: LayoutNode, groupId: string, newGroup: EditorGroup): LayoutNode {
-  if (isEditorGroup(root)) {
-    return root.id === groupId ? newGroup : root
-  }
-  const split = root as SplitNode
-  return {
-    ...split,
-    children: split.children.map((c) => replaceGroup(c, groupId, newGroup)),
-  }
-}
 
 function collectAllTabs(node: LayoutNode): TabEntry[] {
   if (isEditorGroup(node)) return [...node.tabs]
@@ -93,11 +83,11 @@ function reducer(state: AppState, action: AppAction): AppState {
 
     // ---- File Operations ----
     case 'OPEN_FILE': {
-      const file = action.payload
+      const { tabId, ...file } = action.payload
       const newOpenFiles = { ...state.openFiles, [file.fileId]: file }
 
       const tab: TabEntry = {
-        id: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: tabId,
         fileId: file.fileId,
         filePath: file.filePath,
         fileName: file.fileName,
@@ -116,12 +106,12 @@ function reducer(state: AppState, action: AppAction): AppState {
       const group = findGroup(newLayout, targetGroupId)
       if (group) {
         const updatedGroup = addTabToGroup(group, tab)
-        newLayout = replaceGroup(newLayout, targetGroupId, updatedGroup)
+        newLayout = transformNode(newLayout, targetGroupId, () => updatedGroup)
       } else {
         const firstGroup = getFirstGroup(newLayout)
         if (firstGroup) {
           const updatedGroup = addTabToGroup(firstGroup, tab)
-          newLayout = replaceGroup(newLayout, firstGroup.id, updatedGroup)
+          newLayout = transformNode(newLayout, firstGroup.id, () => updatedGroup)
           targetGroupId = firstGroup.id
         }
       }
@@ -157,7 +147,7 @@ function reducer(state: AppState, action: AppAction): AppState {
           ? newFirstGroup.tabs[newFirstGroup.activeTabIndex >= 0 ? newFirstGroup.activeTabIndex : 0]?.id ?? null
           : null
       } else {
-        newLayout = replaceGroup(state.layoutRoot, groupId, result)
+        newLayout = transformNode(state.layoutRoot, groupId, () => result)
         newActiveTabId = getActiveTab(result)?.id ?? null
       }
 
@@ -201,7 +191,7 @@ function reducer(state: AppState, action: AppAction): AppState {
       const tabIdx = group.tabs.findIndex((t) => t.id === tabId)
       if (tabIdx < 0) return state
       const updatedGroup = { ...group, activeTabIndex: tabIdx }
-      const newLayout = replaceGroup(state.layoutRoot, groupId, updatedGroup)
+      const newLayout = transformNode(state.layoutRoot, groupId, () => updatedGroup)
       return {
         ...state,
         layoutRoot: newLayout,
@@ -282,7 +272,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         ),
       }
 
-      const newLayout = replaceGroup(state.layoutRoot, group.id, updatedGroup)
+      const newLayout = transformNode(state.layoutRoot, group.id, () => updatedGroup)
       return { ...state, layoutRoot: newLayout }
     }
 

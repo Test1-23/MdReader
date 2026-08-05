@@ -37,7 +37,7 @@ export function usePasteHandler() {
         headings,
       }
 
-      dispatch({ type: 'OPEN_FILE', payload: openFile })
+      dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` } })
     }
 
     window.addEventListener('paste', handlePaste)

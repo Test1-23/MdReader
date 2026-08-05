@@ -111,10 +111,12 @@ export function moveTab(
 ): LayoutNode {
   // First, find and remove the tab from the source group
   let tabToMove: TabEntry | null = null
+  let removedIdx = -1
 
   const afterRemove = transformNode(root, fromGroupId, (group) => {
     const idx = group.tabs.findIndex((t) => t.id === tabId)
     if (idx < 0) return group
+    removedIdx = idx
     tabToMove = { ...group.tabs[idx] }
     const newTabs = group.tabs.filter((t) => t.id !== tabId)
     let newActiveIdx = group.activeTabIndex
@@ -132,10 +134,23 @@ export function moveTab(
 
   if (!tabToMove) return root
 
+  // Clean up the source group if it's now empty after removing the tab
+  const sourceGroup = findGroup(afterRemove, fromGroupId)
+  let cleanedLayout = afterRemove
+  if (sourceGroup && sourceGroup.tabs.length === 0) {
+    cleanedLayout = removeNode(afterRemove, fromGroupId)
+  }
+
+  // Adjust toIndex for same-group moves: after removal, indices shift left
+  let adjustedIndex = toIndex
+  if (fromGroupId === toGroupId && removedIdx >= 0 && toIndex > removedIdx) {
+    adjustedIndex = toIndex - 1
+  }
+
   // Then insert into destination group
-  return transformNode(afterRemove, toGroupId, (group) => {
+  return transformNode(cleanedLayout, toGroupId, (group) => {
     const newTabs = [...group.tabs]
-    const insertIdx = Math.min(toIndex, newTabs.length)
+    const insertIdx = Math.min(adjustedIndex, newTabs.length)
     newTabs.splice(insertIdx, 0, tabToMove!)
     return {
       ...group,
@@ -162,7 +177,7 @@ export function resizeSplit(root: LayoutNode, splitId: string, sizes: number[]):
 
 // ---- Layout Tree Helpers ----
 
-function transformNode(
+export function transformNode(
   node: LayoutNode,
   targetId: string,
   fn: (group: EditorGroup) => LayoutNode
@@ -229,22 +244,16 @@ function removeNode(node: LayoutNode, targetId: string): LayoutNode {
     return newChildren[0]
   }
 
-  // Rebalance sizes
-  if (newChildren.length === split.children.length) {
-    return { ...split } // Nothing changed
-  }
-
-  // Recalculate sizes proportionally
+  // Recalculate sizes proportionally for remaining children
   const remainingSize = split.sizes.reduce((sum, size, i) => {
     return split.children[i]?.id === targetId ? sum : sum + size
   }, 0)
 
-  const newSizes = split.children
-    .filter((c) => c.id !== targetId)
-    .map((_, i) => {
-      const origSize = split.sizes[split.children.findIndex((c) => c.id === newChildren[i]?.id)]
-      return Math.round((origSize / remainingSize) * 100)
-    })
+  const newSizes = newChildren.map((child) => {
+    const origIdx = split.children.findIndex((c) => c.id === child.id)
+    const origSize = split.sizes[origIdx] ?? 0
+    return remainingSize > 0 ? Math.round((origSize / remainingSize) * 100) : Math.round(100 / newChildren.length)
+  })
 
   return {
     ...split,
@@ -298,5 +307,6 @@ export function findParentSplit(root: LayoutNode, childId: string): SplitNode | 
 export function getFirstGroup(root: LayoutNode): EditorGroup | null {
   if (isEditorGroup(root)) return root
   const split = root as SplitNode
+  if (split.children.length === 0) return null
   return getFirstGroup(split.children[0])
 }

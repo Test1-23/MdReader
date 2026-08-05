@@ -1,6 +1,5 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppContext } from '../../context/AppContext'
-import { findGroup } from '../../utils/layout'
 import type { EditorGroup as EditorGroupType } from '../../types'
 import { GroupTab } from './GroupTab'
 
@@ -27,59 +26,22 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
     [group.id, dispatch]
   )
 
+  // Context menu state (React-based, no DOM leaks)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null)
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [contextMenu])
+
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, tabId: string) => {
       e.preventDefault()
-      // Simple context menu: split options
-      const menuItems = [
-        {
-          label: 'Split Right',
-          action: () => dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, direction: 'vertical' } }),
-        },
-        {
-          label: 'Split Down',
-          action: () => dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, direction: 'horizontal' } }),
-        },
-        { type: 'separator' as const },
-        {
-          label: 'Close',
-          action: () => handleTabClose(tabId),
-        },
-      ]
-
-      // Create a simple context menu
-      const menu = document.createElement('div')
-      menu.className = 'fixed bg-white border border-gray-300 rounded shadow-lg py-1 z-50 text-sm'
-      menu.style.left = `${e.clientX}px`
-      menu.style.top = `${e.clientY}px`
-
-      menuItems.forEach((item) => {
-        if ('type' in item && item.type === 'separator') {
-          const sep = document.createElement('div')
-          sep.className = 'border-t border-gray-200 my-1'
-          menu.appendChild(sep)
-        } else if ('label' in item) {
-          const menuItem = document.createElement('div')
-          menuItem.className = 'px-4 py-1 hover:bg-blue-500 hover:text-white cursor-pointer'
-          menuItem.textContent = item.label
-          menuItem.onclick = () => {
-            item.action()
-            menu.remove()
-          }
-          menu.appendChild(menuItem)
-        }
-      })
-
-      document.body.appendChild(menu)
-
-      // Remove menu on click outside
-      const removeMenu = () => {
-        menu.remove()
-        document.removeEventListener('click', removeMenu)
-      }
-      setTimeout(() => document.addEventListener('click', removeMenu), 0)
+      setContextMenu({ x: e.clientX, y: e.clientY, tabId })
     },
-    [group.id, dispatch, handleTabClose]
+    []
   )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -89,36 +51,33 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
-      // Handle tab drop for reorder/move
       const tabId = e.dataTransfer.getData('text/tab-id')
       const fromGroupId = e.dataTransfer.getData('text/from-group-id')
 
-      if (tabId && fromGroupId && fromGroupId !== group.id) {
-        // Move tab from another group
-        const dropIndex = group.tabs.length > 0
-          ? Math.min(
-              group.tabs.findIndex(
-                (_, i) => {
-                  const tabEl = tabBarRef.current?.children[i] as HTMLElement
-                  return tabEl && e.clientX < tabEl.getBoundingClientRect().left + tabEl.offsetWidth / 2
-                }
-              ),
-              group.tabs.length
-            )
-          : 0
+      if (!tabId || !fromGroupId) return
 
-        dispatch({
-          type: 'MOVE_TAB',
-          payload: {
-            tabId,
-            fromGroupId,
-            toGroupId: group.id,
-            toIndex: dropIndex >= 0 ? dropIndex : group.tabs.length,
-          },
-        })
-      }
+      // Read tab positions once outside the loop (avoid layout thrashing)
+      const tabChildren = Array.from(tabBarRef.current?.children ?? [])
+        .slice(0, group.tabs.length)
+      const tabMidpoints = tabChildren.map((el) => {
+        const rect = (el as HTMLElement).getBoundingClientRect()
+        return rect.left + rect.width / 2
+      })
+
+      const foundIdx = tabMidpoints.findIndex((midX) => e.clientX < midX)
+      const dropIndex = foundIdx >= 0 ? foundIdx : group.tabs.length
+
+      dispatch({
+        type: 'MOVE_TAB',
+        payload: {
+          tabId,
+          fromGroupId,
+          toGroupId: group.id,
+          toIndex: dropIndex,
+        },
+      })
     },
-    [group.id, group.tabs, dispatch]
+    [group.id, group.tabs.length, dispatch]
   )
 
   return (
@@ -146,6 +105,43 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
 
       {/* Spacer to fill the rest */}
       <div className="flex-1 h-full" />
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed bg-white border border-gray-300 rounded shadow-lg py-1 z-50 text-sm"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <div
+            className="px-4 py-1 hover:bg-blue-500 hover:text-white cursor-pointer"
+            onClick={() => {
+              dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, direction: 'vertical' } })
+              setContextMenu(null)
+            }}
+          >
+            Split Right
+          </div>
+          <div
+            className="px-4 py-1 hover:bg-blue-500 hover:text-white cursor-pointer"
+            onClick={() => {
+              dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, direction: 'horizontal' } })
+              setContextMenu(null)
+            }}
+          >
+            Split Down
+          </div>
+          <div className="border-t border-gray-200 my-1" />
+          <div
+            className="px-4 py-1 hover:bg-blue-500 hover:text-white cursor-pointer"
+            onClick={() => {
+              handleTabClose(contextMenu.tabId)
+              setContextMenu(null)
+            }}
+          >
+            Close
+          </div>
+        </div>
+      )}
     </div>
   )
 }

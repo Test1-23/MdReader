@@ -107,7 +107,7 @@ export type AppAction =
   | { type: 'SET_SIDEBAR_LOADING'; payload: boolean }
 
   // File operations
-  | { type: 'OPEN_FILE'; payload: OpenFile }
+  | { type: 'OPEN_FILE'; payload: OpenFile & { tabId: string } }
   | { type: 'CLOSE_TAB'; payload: { groupId: string; tabId: string } }
   | { type: 'SET_ACTIVE_TAB'; payload: { groupId: string; tabId: string } }
 
