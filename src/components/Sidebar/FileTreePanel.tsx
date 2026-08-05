@@ -117,6 +117,14 @@ export function FileTreePanel() {
                 ${depth > 0 ? 'pl-' + (depth * 16 + 8) : 'pl-2'}
               `}
               style={{ paddingLeft: `${depth * 16 + 8}px` }}
+              draggable={node.isFile}
+              onDragStart={(e) => {
+                if (node.isFile) {
+                  e.dataTransfer.setData('text/file-path', node.path)
+                  e.dataTransfer.setData('text/file-name', node.name)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }
+              }}
               onClick={() => {
                 if (node.isDirectory) {
                   handleToggleDir(node)

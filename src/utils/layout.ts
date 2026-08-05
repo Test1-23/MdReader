@@ -70,18 +70,29 @@ export function getActiveTab(group: EditorGroup): TabEntry | null {
 export function splitGroup(
   root: LayoutNode,
   groupId: string,
-  direction: 'horizontal' | 'vertical'
+  direction: 'horizontal' | 'vertical',
+  tabId?: string
 ): LayoutNode {
   return transformNode(root, groupId, (group) => {
     const newGroup = createEditorGroup()
-    // Move the active tab to the new group
-    if (group.tabs.length > 0 && group.activeTabIndex >= 0) {
-      const activeTab = group.tabs[group.activeTabIndex]
-      const remainingTabs = group.tabs.filter((_, i) => i !== group.activeTabIndex)
+
+    // Find which tab to move: specific tabId, or fall back to active tab
+    let moveIdx = -1
+    if (tabId) {
+      moveIdx = group.tabs.findIndex((t) => t.id === tabId)
+    }
+    if (moveIdx < 0 && group.activeTabIndex >= 0) {
+      moveIdx = group.activeTabIndex
+    }
+
+    // Move the selected tab to the new group
+    if (moveIdx >= 0 && group.tabs.length > 0) {
+      const moveTab = group.tabs[moveIdx]
+      const remainingTabs = group.tabs.filter((_, i) => i !== moveIdx)
 
       // If original group becomes empty, don't create a split with an empty pane
       if (remainingTabs.length === 0) {
-        return { ...newGroup, tabs: [activeTab], activeTabIndex: 0 }
+        return { ...newGroup, tabs: [moveTab], activeTabIndex: 0 }
       }
 
       return {
@@ -90,7 +101,7 @@ export function splitGroup(
         direction,
         children: [
           { ...group, tabs: remainingTabs, activeTabIndex: remainingTabs.length > 0 ? 0 : -1 },
-          { ...newGroup, tabs: [activeTab], activeTabIndex: 0 },
+          { ...newGroup, tabs: [moveTab], activeTabIndex: 0 },
         ],
         sizes: [50, 50],
       }

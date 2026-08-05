@@ -83,7 +83,7 @@ function reducer(state: AppState, action: AppAction): AppState {
 
     // ---- File Operations ----
     case 'OPEN_FILE': {
-      const { tabId, ...file } = action.payload
+      const { tabId, groupId: targetGroupId, ...file } = action.payload
       const newOpenFiles = { ...state.openFiles, [file.fileId]: file }
 
       const tab: TabEntry = {
@@ -99,20 +99,19 @@ function reducer(state: AppState, action: AppAction): AppState {
         layout = createDefaultLayout()
       }
 
-      // Add tab to the active group or the first group
-      let targetGroupId = state.activeGroupId || getFirstGroup(layout)?.id || ''
+      // Target the specified group, active group, or first group
+      const effectiveGroupId = targetGroupId || state.activeGroupId || getFirstGroup(layout)?.id || ''
       let newLayout = layout
 
-      const group = findGroup(newLayout, targetGroupId)
+      const group = findGroup(newLayout, effectiveGroupId)
       if (group) {
         const updatedGroup = addTabToGroup(group, tab)
-        newLayout = transformNode(newLayout, targetGroupId, () => updatedGroup)
+        newLayout = transformNode(newLayout, effectiveGroupId, () => updatedGroup)
       } else {
         const firstGroup = getFirstGroup(newLayout)
         if (firstGroup) {
           const updatedGroup = addTabToGroup(firstGroup, tab)
           newLayout = transformNode(newLayout, firstGroup.id, () => updatedGroup)
-          targetGroupId = firstGroup.id
         }
       }
 
@@ -120,7 +119,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         ...state,
         layoutRoot: newLayout,
         openFiles: newOpenFiles,
-        activeGroupId: targetGroupId,
+        activeGroupId: effectiveGroupId,
         activeTabId: tab.id,
       }
     }
@@ -203,7 +202,7 @@ function reducer(state: AppState, action: AppAction): AppState {
     // ---- Editor Group Operations ----
     case 'SPLIT_GROUP': {
       if (!state.layoutRoot) return state
-      const newLayout = splitGroup(state.layoutRoot, action.payload.groupId, action.payload.direction)
+      const newLayout = splitGroup(state.layoutRoot, action.payload.groupId, action.payload.direction, action.payload.tabId)
       return { ...state, layoutRoot: newLayout }
     }
 

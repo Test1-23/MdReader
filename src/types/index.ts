@@ -107,12 +107,12 @@ export type AppAction =
   | { type: 'SET_SIDEBAR_LOADING'; payload: boolean }
 
   // File operations
-  | { type: 'OPEN_FILE'; payload: OpenFile & { tabId: string } }
+  | { type: 'OPEN_FILE'; payload: OpenFile & { tabId: string; groupId?: string } }
   | { type: 'CLOSE_TAB'; payload: { groupId: string; tabId: string } }
   | { type: 'SET_ACTIVE_TAB'; payload: { groupId: string; tabId: string } }
 
   // Editor group operations
-  | { type: 'SPLIT_GROUP'; payload: { groupId: string; direction: 'horizontal' | 'vertical' } }
+  | { type: 'SPLIT_GROUP'; payload: { groupId: string; direction: 'horizontal' | 'vertical'; tabId?: string } }
   | { type: 'CLOSE_GROUP'; payload: { groupId: string } }
   | { type: 'MOVE_TAB'; payload: { tabId: string; fromGroupId: string; toGroupId: string; toIndex: number } }
   | { type: 'RESIZE_SPLIT'; payload: { splitId: string; sizes: number[] } }
