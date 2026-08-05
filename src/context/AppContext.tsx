@@ -209,11 +209,41 @@ function reducer(state: AppState, action: AppAction): AppState {
 
     case 'CLOSE_GROUP': {
       if (!state.layoutRoot) return state
-      const newLayout = closeGroup(state.layoutRoot, action.payload.groupId)
+      const groupId = action.payload.groupId
+
+      // Collect fileIds before closing for cleanup
+      const closingGroup = findGroup(state.layoutRoot, groupId)
+      const closingFileIds = closingGroup?.tabs.map(t => t.fileId) ?? []
+
+      const newLayout = closeGroup(state.layoutRoot, groupId)
+
+      // Remove openFiles no longer referenced by any remaining tab
+      const allRemainingTabs = collectAllTabs(newLayout)
+      const remainingFileIds = new Set(allRemainingTabs.map(t => t.fileId))
+      let newOpenFiles = { ...state.openFiles }
+      for (const fileId of closingFileIds) {
+        if (!remainingFileIds.has(fileId)) {
+          const { [fileId]: _, ...rest } = newOpenFiles
+          newOpenFiles = rest
+        }
+      }
+
+      // If no groups left, return to empty state
+      if (allRemainingTabs.length === 0) {
+        return {
+          ...state,
+          layoutRoot: null,
+          openFiles: {},
+          activeGroupId: null,
+          activeTabId: null,
+        }
+      }
+
       const newFirstGroup = getFirstGroup(newLayout)
       return {
         ...state,
         layoutRoot: newLayout,
+        openFiles: newOpenFiles,
         activeGroupId: newFirstGroup?.id ?? null,
         activeTabId: newFirstGroup && newFirstGroup.tabs.length > 0
           ? (newFirstGroup.tabs[newFirstGroup.activeTabIndex >= 0 ? newFirstGroup.activeTabIndex : 0]?.id ?? null)

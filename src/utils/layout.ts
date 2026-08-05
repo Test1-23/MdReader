@@ -78,6 +78,12 @@ export function splitGroup(
     if (group.tabs.length > 0 && group.activeTabIndex >= 0) {
       const activeTab = group.tabs[group.activeTabIndex]
       const remainingTabs = group.tabs.filter((_, i) => i !== group.activeTabIndex)
+
+      // If original group becomes empty, don't create a split with an empty pane
+      if (remainingTabs.length === 0) {
+        return { ...newGroup, tabs: [activeTab], activeTabIndex: 0 }
+      }
+
       return {
         type: 'split',
         id: newId('split'),

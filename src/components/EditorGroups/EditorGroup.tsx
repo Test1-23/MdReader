@@ -28,8 +28,22 @@ export function EditorGroup({ group }: EditorGroupProps) {
       className={`h-full flex flex-col ${isActive ? '' : ''}`}
       onClick={handleFocus}
     >
-      {/* Tab Bar */}
-      <GroupTabs group={group} isActive={isActive} />
+      {/* Tab Bar with group close button */}
+      <div className="flex items-stretch" style={{ height: '36px' }}>
+        <div className="flex-1 min-w-0">
+          <GroupTabs group={group} isActive={isActive} />
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            dispatch({ type: 'CLOSE_GROUP', payload: { groupId: group.id } })
+          }}
+          className="flex-shrink-0 w-7 flex items-center justify-center bg-gray-200 border-b border-gray-300 text-gray-400 hover:text-gray-700 hover:bg-gray-300 transition-colors text-sm"
+          title="Close Group"
+        >
+          ×
+        </button>
+      </div>
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
