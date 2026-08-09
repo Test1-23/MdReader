@@ -85,16 +85,10 @@ export function splitGroup(
       moveIdx = group.activeTabIndex
     }
 
-    // Move the selected tab to the new group
+    // Move the selected tab to the new group (always create split, allow empty panes)
     if (moveIdx >= 0 && group.tabs.length > 0) {
       const moveTab = group.tabs[moveIdx]
       const remainingTabs = group.tabs.filter((_, i) => i !== moveIdx)
-
-      // If original group becomes empty, don't create a split with an empty pane
-      if (remainingTabs.length === 0) {
-        return { ...newGroup, tabs: [moveTab], activeTabIndex: 0 }
-      }
-
       return {
         type: 'split',
         id: newId('split'),
@@ -112,6 +106,124 @@ export function splitGroup(
       id: newId('split'),
       direction,
       children: [group, newGroup],
+      sizes: [50, 50],
+    }
+  })
+}
+
+// ---- Split With Tab (atomic move + split) ----
+
+export function splitWithTab(
+  root: LayoutNode,
+  tabId: string,
+  fromGroupId: string,
+  toGroupId: string,
+  direction: 'horizontal' | 'vertical'
+): LayoutNode {
+  let tabToMove: TabEntry | null = null
+
+  // Step 1: Remove tab from source group
+  const afterRemove = transformNode(root, fromGroupId, (group) => {
+    const idx = group.tabs.findIndex((t) => t.id === tabId)
+    if (idx < 0) return group
+    tabToMove = { ...group.tabs[idx] }
+    const newTabs = group.tabs.filter((t) => t.id !== tabId)
+    let newActiveIdx = group.activeTabIndex
+    if (idx === newActiveIdx) {
+      newActiveIdx = Math.min(idx, newTabs.length - 1)
+    } else if (idx < newActiveIdx) {
+      newActiveIdx--
+    }
+    return { ...group, tabs: newTabs, activeTabIndex: newActiveIdx }
+  })
+
+  if (!tabToMove) return root
+
+  // Step 2: Clean up empty source group
+  let cleaned = afterRemove
+  const sourceGroup = findGroup(afterRemove, fromGroupId)
+  if (sourceGroup && sourceGroup.tabs.length === 0) {
+    cleaned = removeNode(afterRemove, fromGroupId)
+  }
+
+  // Step 3: Split destination group, putting the moved tab in the new pane
+  return transformNode(cleaned, toGroupId, (group) => {
+    const newGroup = createEditorGroup()
+    return {
+      type: 'split',
+      id: newId('split'),
+      direction,
+      children: [
+        group,
+        { ...newGroup, tabs: [tabToMove!], activeTabIndex: 0 },
+      ],
+      sizes: [50, 50],
+    }
+  })
+}
+
+// ---- Promote Sibling (close group → lift sibling) ----
+
+function replaceNode(root: LayoutNode, targetId: string, replacement: LayoutNode): LayoutNode {
+  if (isEditorGroup(root)) return root.id === targetId ? replacement : root
+  const split = root as SplitNode
+  if (split.id === targetId) return replacement
+  return { ...split, children: split.children.map((c) => replaceNode(c, targetId, replacement)) }
+}
+
+export function promoteSibling(root: LayoutNode, groupId: string): LayoutNode {
+  const parentSplit = findParentSplit(root, groupId)
+  if (!parentSplit) return removeNode(root, groupId)
+
+  const siblings = parentSplit.children.filter((c) => c.id !== groupId)
+  if (siblings.length === 0) return removeNode(root, groupId)
+
+  // Only one sibling → lift it to the parent Split's position
+  if (siblings.length === 1) {
+    return replaceNode(root, parentSplit.id, siblings[0])
+  }
+
+  // Multiple siblings → keep the Split, just remove the target group
+  return removeNode(root, groupId)
+}
+
+// ---- Split With File (atomic OPEN + SPLIT) ----
+
+export function splitWithFile(
+  root: LayoutNode,
+  targetGroupId: string,
+  tab: TabEntry,
+  direction: 'horizontal' | 'vertical'
+): LayoutNode {
+  return transformNode(root, targetGroupId, (group) => {
+    const newGroup = createEditorGroup()
+
+    // Dedup: if file already open in this group, move the existing tab
+    const existingIdx = group.tabs.findIndex((t) => t.fileId === tab.fileId)
+    if (existingIdx >= 0) {
+      const existingTab = group.tabs[existingIdx]
+      const remainingTabs = group.tabs.filter((_, i) => i !== existingIdx)
+      return {
+        type: 'split', id: newId('split'), direction,
+        children: [
+          { ...group, tabs: remainingTabs, activeTabIndex: remainingTabs.length > 0 ? 0 : -1 },
+          { ...newGroup, tabs: [existingTab], activeTabIndex: 0 },
+        ],
+        sizes: [50, 50],
+      }
+    }
+
+    // New file: add to group then move the new tab to the new pane
+    const withTab = addTabToGroup(group, tab)
+    const activeTab = getActiveTab(withTab)
+    if (!activeTab) return group
+    const remainingTabs = withTab.tabs.filter((t) => t.id !== activeTab.id)
+    return {
+      type: 'split', id: newId('split'), direction,
+      children: [
+        { ...group, tabs: remainingTabs, activeTabIndex: remainingTabs.length > 0 ? 0 : -1 },
+        { ...newGroup, tabs: [activeTab], activeTabIndex: 0 },
+      ],
       sizes: [50, 50],
     }
   })
@@ -256,11 +368,7 @@ function removeNode(node: LayoutNode, targetId: string): LayoutNode {
     })
     .filter(Boolean) as LayoutNode[]
 
-  // If only one child remains, collapse the split
-  if (newChildren.length === 1) {
-    return newChildren[0]
-  }
-
+  // Don't collapse — keep the Split structure even with 1 child
   // Recalculate sizes proportionally for remaining children
   const remainingSize = split.sizes.reduce((sum, size, i) => {
     return split.children[i]?.id === targetId ? sum : sum + size

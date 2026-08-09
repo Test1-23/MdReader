@@ -8,25 +8,35 @@ import { GroupTabs } from './GroupTabs'
 import { GroupContent } from './GroupContent'
 
 type DropZone = 'top' | 'bottom' | 'left' | 'right' | 'center' | null
+type EdgeZone = 'top' | 'bottom' | 'left' | 'right'
 
-interface EditorGroupProps {
-  group: EditorGroupType
-}
+const TAB_BAR_HEIGHT = 36
+const EDGE_PCT = 20
 
-function computeZone(e: React.DragEvent<HTMLDivElement>): Exclude<DropZone, null> {
+function computeZone(e: React.DragEvent<HTMLDivElement>): DropZone {
   const rect = e.currentTarget.getBoundingClientRect()
-  const xPct = ((e.clientX - rect.left) / rect.width) * 100
-  const yPct = ((e.clientY - rect.top) / rect.height) * 100
+  const contentTop = rect.top + TAB_BAR_HEIGHT
+  const contentHeight = rect.height - TAB_BAR_HEIGHT
 
-  if (xPct < 20) return 'left'
-  if (xPct > 80) return 'right'
-  if (yPct < 20) return 'top'
-  if (yPct > 80) return 'bottom'
+  // Tab bar area — no edge detection (prevents double-fire with tab interactions)
+  if (e.clientY < contentTop) return 'center'
+
+  const xPct = ((e.clientX - rect.left) / rect.width) * 100
+  const yPct = ((e.clientY - contentTop) / contentHeight) * 100
+
+  if (xPct < EDGE_PCT) return 'left'
+  if (xPct > 100 - EDGE_PCT) return 'right'
+  if (yPct < EDGE_PCT) return 'top'
+  if (yPct > 100 - EDGE_PCT) return 'bottom'
   return 'center'
 }
 
-function zoneToDirection(zone: string): 'horizontal' | 'vertical' {
+function zoneToDirection(zone: EdgeZone): 'horizontal' | 'vertical' {
   return zone === 'left' || zone === 'right' ? 'horizontal' : 'vertical'
+}
+
+interface EditorGroupProps {
+  group: EditorGroupType
 }
 
 export function EditorGroup({ group }: EditorGroupProps) {
@@ -42,7 +52,6 @@ export function EditorGroup({ group }: EditorGroupProps) {
     }
   }, [group.id, isActive, dispatch])
 
-  // Get the active tab
   const activeTab = group.tabs.length > 0 && group.activeTabIndex >= 0
     ? group.tabs[group.activeTabIndex]
     : null
@@ -56,7 +65,6 @@ export function EditorGroup({ group }: EditorGroupProps) {
   }, [])
 
   const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    // Only clear if leaving the group container (not entering a child)
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDropZone(null)
     }
@@ -68,6 +76,9 @@ export function EditorGroup({ group }: EditorGroupProps) {
 
     const zone = computeZone(e)
     setDropZone(null)
+
+    // Hide global drag overlay
+    dispatch({ type: 'SET_DRAG_OVER', payload: false })
 
     // --- Case 1: External file drop (files in dataTransfer) ---
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
@@ -81,16 +92,14 @@ export function EditorGroup({ group }: EditorGroupProps) {
         const openFile = await readDroppedFile(file, readFile, isElectron)
         if (!openFile) return
 
-        const tabId = generateTabId()
-
         if (zone === 'center') {
-          // Normal open in this group
-          dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId, groupId: group.id } })
+          dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
         } else {
-          // Edge zone: open file then split
-          const direction = zoneToDirection(zone)
-          dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId, groupId: group.id } })
-          dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, direction, tabId } })
+          const direction = zoneToDirection(zone as EdgeZone)
+          dispatch({
+            type: 'OPEN_FILE_AND_SPLIT',
+            payload: { file: openFile, tabId: generateTabId(), groupId: group.id, direction },
+          })
         }
       } catch {
         dispatch({ type: 'SET_ERROR', payload: 'Failed to read the dropped file.' })
@@ -106,22 +115,21 @@ export function EditorGroup({ group }: EditorGroupProps) {
         const fileName = getFileName(filePath)
         const fileId = generateFileId(filePath)
         const headings = extractHeadings(result.content)
-
         const openFile = {
           fileId, filePath, fileName,
-          content: result.content,
-          fileSize: result.size,
-          lastModified: result.lastModified,
-          headings,
+          content: result.content, fileSize: result.size,
+          lastModified: result.lastModified, headings,
         }
         const tabId = generateTabId()
 
         if (zone === 'center') {
           dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId, groupId: group.id } })
         } else {
-          const direction = zoneToDirection(zone)
-          dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId, groupId: group.id } })
-          dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, direction, tabId } })
+          const direction = zoneToDirection(zone as EdgeZone)
+          dispatch({
+            type: 'OPEN_FILE_AND_SPLIT',
+            payload: { file: openFile, tabId, groupId: group.id, direction },
+          })
         }
       } catch {
         dispatch({ type: 'SET_ERROR', payload: `Failed to open file: ${filePath}` })
@@ -129,17 +137,24 @@ export function EditorGroup({ group }: EditorGroupProps) {
       return
     }
 
-    // --- Case 3: Tab drag to edge → split (center-zone handled by GroupTabs) ---
+    // --- Case 3: Tab drag (tab-id + from-group-id) — EditorGroup handles all tab drops ---
     const tabId = e.dataTransfer.getData('text/tab-id')
     const fromGroupId = e.dataTransfer.getData('text/from-group-id')
-    if (tabId && fromGroupId && zone !== 'center') {
-      // Edge zone: move tab into this group, then split it into a new pane
-      const direction = zoneToDirection(zone)
-      dispatch({
-        type: 'MOVE_TAB',
-        payload: { tabId, fromGroupId, toGroupId: group.id, toIndex: group.tabs.length },
-      })
-      dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, direction, tabId } })
+    if (tabId && fromGroupId) {
+      if (zone === 'center') {
+        // Center zone → normal tab move (replaces GroupTabs' old drop handler)
+        dispatch({
+          type: 'MOVE_TAB',
+          payload: { tabId, fromGroupId, toGroupId: group.id, toIndex: group.tabs.length },
+        })
+      } else {
+        // Edge zone → split with this tab
+        const direction = zoneToDirection(zone as EdgeZone)
+        dispatch({
+          type: 'SPLIT_WITH_TAB',
+          payload: { tabId, fromGroupId, toGroupId: group.id, direction },
+        })
+      }
     }
   }, [group.id, group.tabs.length, dispatch, readFile, isElectron])
 
@@ -154,7 +169,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
       onDrop={handleDrop}
     >
       {/* Tab Bar with group close button */}
-      <div className="flex items-stretch" style={{ height: '36px' }}>
+      <div className="flex items-stretch" style={{ height: TAB_BAR_HEIGHT }}>
         <div className="flex-1 min-w-0">
           <GroupTabs group={group} isActive={isActive} />
         </div>

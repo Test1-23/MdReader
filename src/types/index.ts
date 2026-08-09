@@ -113,6 +113,8 @@ export type AppAction =
 
   // Editor group operations
   | { type: 'SPLIT_GROUP'; payload: { groupId: string; direction: 'horizontal' | 'vertical'; tabId?: string } }
+  | { type: 'OPEN_FILE_AND_SPLIT'; payload: { file: OpenFile; tabId: string; groupId: string; direction: 'horizontal' | 'vertical' } }
+  | { type: 'SPLIT_WITH_TAB'; payload: { tabId: string; fromGroupId: string; toGroupId: string; direction: 'horizontal' | 'vertical' } }
   | { type: 'CLOSE_GROUP'; payload: { groupId: string } }
   | { type: 'MOVE_TAB'; payload: { tabId: string; fromGroupId: string; toGroupId: string; toIndex: number } }
   | { type: 'RESIZE_SPLIT'; payload: { splitId: string; sizes: number[] } }

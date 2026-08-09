@@ -6,6 +6,9 @@ import {
   addTabToGroup,
   removeTabFromGroup,
   splitGroup,
+  splitWithTab,
+  splitWithFile,
+  promoteSibling,
   moveTab,
   closeGroup,
   resizeSplit,
@@ -202,8 +205,49 @@ function reducer(state: AppState, action: AppAction): AppState {
     // ---- Editor Group Operations ----
     case 'SPLIT_GROUP': {
       if (!state.layoutRoot) return state
-      const newLayout = splitGroup(state.layoutRoot, action.payload.groupId, action.payload.direction, action.payload.tabId)
-      return { ...state, layoutRoot: newLayout }
+      const { groupId, direction, tabId } = action.payload
+      const newLayout = splitGroup(state.layoutRoot, groupId, direction, tabId)
+      // Find the new group (containing the moved tab) and set focus to it
+      const tabToFind = tabId
+        || findGroup(state.layoutRoot, groupId)?.tabs[findGroup(state.layoutRoot, groupId)?.activeTabIndex ?? 0]?.id
+      const newGroup = tabToFind ? findGroupContainingTab(newLayout, tabToFind) : null
+      return {
+        ...state,
+        layoutRoot: newLayout,
+        activeGroupId: newGroup?.id ?? groupId,
+        activeTabId: tabToFind ?? state.activeTabId,
+      }
+    }
+
+    case 'OPEN_FILE_AND_SPLIT': {
+      if (!state.layoutRoot) return state
+      const { file, tabId, groupId, direction } = action.payload
+      const newOpenFiles = { ...state.openFiles, [file.fileId]: file }
+      const tab: TabEntry = {
+        id: tabId, fileId: file.fileId, filePath: file.filePath,
+        fileName: file.fileName, viewMode: 'preview',
+      }
+      const newLayout = splitWithFile(state.layoutRoot, groupId, tab, direction)
+      const newGroup = findGroupContainingTab(newLayout, tabId)
+      return {
+        ...state,
+        layoutRoot: newLayout,
+        openFiles: newOpenFiles,
+        activeGroupId: newGroup?.id ?? groupId,
+        activeTabId: tabId,
+      }
+    }
+
+    case 'SPLIT_WITH_TAB': {
+      if (!state.layoutRoot) return state
+      const { tabId, fromGroupId, toGroupId, direction } = action.payload
+      const newLayout = splitWithTab(state.layoutRoot, tabId, fromGroupId, toGroupId, direction)
+      return {
+        ...state,
+        layoutRoot: newLayout,
+        activeGroupId: toGroupId,
+        activeTabId: tabId,
+      }
     }
 
     case 'CLOSE_GROUP': {
@@ -214,7 +258,7 @@ function reducer(state: AppState, action: AppAction): AppState {
       const closingGroup = findGroup(state.layoutRoot, groupId)
       const closingFileIds = closingGroup?.tabs.map(t => t.fileId) ?? []
 
-      const newLayout = closeGroup(state.layoutRoot, groupId)
+      const newLayout = promoteSibling(state.layoutRoot, groupId)
 
       // Remove openFiles no longer referenced by any remaining tab
       const allRemainingTabs = collectAllTabs(newLayout)

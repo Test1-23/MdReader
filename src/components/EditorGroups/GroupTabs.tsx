@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAppContext } from '../../context/AppContext'
 import type { EditorGroup as EditorGroupType } from '../../types'
 import { GroupTab } from './GroupTab'
@@ -10,8 +10,6 @@ interface GroupTabsProps {
 
 export function GroupTabs({ group, isActive }: GroupTabsProps) {
   const { state, dispatch } = useAppContext()
-  const tabBarRef = useRef<HTMLDivElement>(null)
-
   const handleTabClick = useCallback(
     (tabId: string) => {
       dispatch({ type: 'SET_ACTIVE_TAB', payload: { groupId: group.id, tabId: tabId } })
@@ -44,52 +42,13 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
     []
   )
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-  }, [])
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      const tabId = e.dataTransfer.getData('text/tab-id')
-      const fromGroupId = e.dataTransfer.getData('text/from-group-id')
-
-      if (!tabId || !fromGroupId) return
-
-      // Read tab positions once outside the loop (avoid layout thrashing)
-      const tabChildren = Array.from(tabBarRef.current?.children ?? [])
-        .slice(0, group.tabs.length)
-      const tabMidpoints = tabChildren.map((el) => {
-        const rect = (el as HTMLElement).getBoundingClientRect()
-        return rect.left + rect.width / 2
-      })
-
-      const foundIdx = tabMidpoints.findIndex((midX) => e.clientX < midX)
-      const dropIndex = foundIdx >= 0 ? foundIdx : group.tabs.length
-
-      dispatch({
-        type: 'MOVE_TAB',
-        payload: {
-          tabId,
-          fromGroupId,
-          toGroupId: group.id,
-          toIndex: dropIndex,
-        },
-      })
-    },
-    [group.id, group.tabs.length, dispatch]
-  )
-
   return (
     <div
-      ref={tabBarRef}
       className={`
         flex items-end overflow-x-auto bg-gray-200 border-b border-gray-300
         ${isActive ? '' : 'opacity-90'}
       `}
       style={{ height: '36px' }}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
     >
       {group.tabs.map((tab) => (
         <GroupTab
