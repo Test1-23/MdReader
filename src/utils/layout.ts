@@ -139,11 +139,13 @@ export function splitWithTab(
 
   if (!tabToMove) return root
 
-  // Step 2: Clean up empty source group
+  // Step 2: Clean up empty source group (only if different from destination)
   let cleaned = afterRemove
-  const sourceGroup = findGroup(afterRemove, fromGroupId)
-  if (sourceGroup && sourceGroup.tabs.length === 0) {
-    cleaned = removeNode(afterRemove, fromGroupId)
+  if (fromGroupId !== toGroupId) {
+    const sourceGroup = findGroup(afterRemove, fromGroupId)
+    if (sourceGroup && sourceGroup.tabs.length === 0) {
+      cleaned = removeNode(afterRemove, fromGroupId)
+    }
   }
 
   // Step 3: Split destination group, putting the moved tab in the new pane
@@ -263,10 +265,10 @@ export function moveTab(
 
   if (!tabToMove) return root
 
-  // Clean up the source group if it's now empty after removing the tab
+  // Clean up the source group if it's now empty (only if different from destination)
   const sourceGroup = findGroup(afterRemove, fromGroupId)
   let cleanedLayout = afterRemove
-  if (sourceGroup && sourceGroup.tabs.length === 0) {
+  if (fromGroupId !== toGroupId && sourceGroup && sourceGroup.tabs.length === 0) {
     cleanedLayout = removeNode(afterRemove, fromGroupId)
   }
 
@@ -367,6 +369,11 @@ function removeNode(node: LayoutNode, targetId: string): LayoutNode {
       return child
     })
     .filter(Boolean) as LayoutNode[]
+
+  // Prevent 0-child Split — all children removed: create a fresh empty group
+  if (newChildren.length === 0) {
+    return createEditorGroup()
+  }
 
   // Don't collapse — keep the Split structure even with 1 child
   // Recalculate sizes proportionally for remaining children
