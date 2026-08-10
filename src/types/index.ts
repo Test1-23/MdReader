@@ -112,9 +112,9 @@ export type AppAction =
   | { type: 'SET_ACTIVE_TAB'; payload: { groupId: string; tabId: string } }
 
   // Editor group operations
-  | { type: 'SPLIT_GROUP'; payload: { groupId: string; direction: 'horizontal' | 'vertical'; tabId?: string } }
-  | { type: 'OPEN_FILE_AND_SPLIT'; payload: { file: OpenFile; tabId: string; groupId: string; direction: 'horizontal' | 'vertical' } }
-  | { type: 'SPLIT_WITH_TAB'; payload: { tabId: string; fromGroupId: string; toGroupId: string; direction: 'horizontal' | 'vertical' } }
+  | { type: 'SPLIT_GROUP'; payload: { groupId: string; direction: 'horizontal' | 'vertical'; tabId?: string; newGroupFirst?: boolean } }
+  | { type: 'OPEN_FILE_AND_SPLIT'; payload: { file: OpenFile; tabId: string; groupId: string; direction: 'horizontal' | 'vertical'; newGroupFirst?: boolean } }
+  | { type: 'SPLIT_WITH_TAB'; payload: { tabId: string; fromGroupId: string; toGroupId: string; direction: 'horizontal' | 'vertical'; newGroupFirst?: boolean } }
   | { type: 'CLOSE_GROUP'; payload: { groupId: string } }
   | { type: 'MOVE_TAB'; payload: { tabId: string; fromGroupId: string; toGroupId: string; toIndex: number } }
   | { type: 'RESIZE_SPLIT'; payload: { splitId: string; sizes: number[] } }

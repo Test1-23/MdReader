@@ -71,7 +71,8 @@ export function splitGroup(
   root: LayoutNode,
   groupId: string,
   direction: 'horizontal' | 'vertical',
-  tabId?: string
+  tabId?: string,
+  newGroupFirst?: boolean
 ): LayoutNode {
   return transformNode(root, groupId, (group) => {
     const newGroup = createEditorGroup()
@@ -89,14 +90,13 @@ export function splitGroup(
     if (moveIdx >= 0 && group.tabs.length > 0) {
       const moveTab = group.tabs[moveIdx]
       const remainingTabs = group.tabs.filter((_, i) => i !== moveIdx)
+      const origPane = { ...group, tabs: remainingTabs, activeTabIndex: remainingTabs.length > 0 ? 0 : -1 }
+      const newPane = { ...newGroup, tabs: [moveTab], activeTabIndex: 0 }
       return {
         type: 'split',
         id: newId('split'),
         direction,
-        children: [
-          { ...group, tabs: remainingTabs, activeTabIndex: remainingTabs.length > 0 ? 0 : -1 },
-          { ...newGroup, tabs: [moveTab], activeTabIndex: 0 },
-        ],
+        children: newGroupFirst ? [newPane, origPane] : [origPane, newPane],
         sizes: [50, 50],
       }
     }
@@ -105,7 +105,7 @@ export function splitGroup(
       type: 'split',
       id: newId('split'),
       direction,
-      children: [group, newGroup],
+      children: newGroupFirst ? [newGroup, group] : [group, newGroup],
       sizes: [50, 50],
     }
   })
@@ -118,7 +118,8 @@ export function splitWithTab(
   tabId: string,
   fromGroupId: string,
   toGroupId: string,
-  direction: 'horizontal' | 'vertical'
+  direction: 'horizontal' | 'vertical',
+  newGroupFirst?: boolean
 ): LayoutNode {
   let tabToMove: TabEntry | null = null
 
@@ -151,14 +152,12 @@ export function splitWithTab(
   // Step 3: Split destination group, putting the moved tab in the new pane
   return transformNode(cleaned, toGroupId, (group) => {
     const newGroup = createEditorGroup()
+    const newPane = { ...newGroup, tabs: [tabToMove!], activeTabIndex: 0 }
     return {
       type: 'split',
       id: newId('split'),
       direction,
-      children: [
-        group,
-        { ...newGroup, tabs: [tabToMove!], activeTabIndex: 0 },
-      ],
+      children: newGroupFirst ? [newPane, group] : [group, newPane],
       sizes: [50, 50],
     }
   })
@@ -195,7 +194,8 @@ export function splitWithFile(
   root: LayoutNode,
   targetGroupId: string,
   tab: TabEntry,
-  direction: 'horizontal' | 'vertical'
+  direction: 'horizontal' | 'vertical',
+  newGroupFirst?: boolean
 ): LayoutNode {
   return transformNode(root, targetGroupId, (group) => {
     const newGroup = createEditorGroup()
@@ -205,12 +205,11 @@ export function splitWithFile(
     if (existingIdx >= 0) {
       const existingTab = group.tabs[existingIdx]
       const remainingTabs = group.tabs.filter((_, i) => i !== existingIdx)
+      const origPane = { ...group, tabs: remainingTabs, activeTabIndex: remainingTabs.length > 0 ? 0 : -1 }
+      const newPane = { ...newGroup, tabs: [existingTab], activeTabIndex: 0 }
       return {
         type: 'split', id: newId('split'), direction,
-        children: [
-          { ...group, tabs: remainingTabs, activeTabIndex: remainingTabs.length > 0 ? 0 : -1 },
-          { ...newGroup, tabs: [existingTab], activeTabIndex: 0 },
-        ],
+        children: newGroupFirst ? [newPane, origPane] : [origPane, newPane],
         sizes: [50, 50],
       }
     }
@@ -220,12 +219,11 @@ export function splitWithFile(
     const activeTab = getActiveTab(withTab)
     if (!activeTab) return group
     const remainingTabs = withTab.tabs.filter((t) => t.id !== activeTab.id)
+    const origPane = { ...group, tabs: remainingTabs, activeTabIndex: remainingTabs.length > 0 ? 0 : -1 }
+    const newPane2 = { ...newGroup, tabs: [activeTab], activeTabIndex: 0 }
     return {
       type: 'split', id: newId('split'), direction,
-      children: [
-        { ...group, tabs: remainingTabs, activeTabIndex: remainingTabs.length > 0 ? 0 : -1 },
-        { ...newGroup, tabs: [activeTab], activeTabIndex: 0 },
-      ],
+      children: newGroupFirst ? [newPane2, origPane] : [origPane, newPane2],
       sizes: [50, 50],
     }
   })

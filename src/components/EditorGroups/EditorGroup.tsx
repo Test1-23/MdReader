@@ -98,7 +98,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
           const direction = zoneToDirection(zone as EdgeZone)
           dispatch({
             type: 'OPEN_FILE_AND_SPLIT',
-            payload: { file: openFile, tabId: generateTabId(), groupId: group.id, direction },
+            payload: { file: openFile, tabId: generateTabId(), groupId: group.id, direction, newGroupFirst: zone === 'left' || zone === 'top' },
           })
         }
       } catch {
@@ -128,7 +128,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
           const direction = zoneToDirection(zone as EdgeZone)
           dispatch({
             type: 'OPEN_FILE_AND_SPLIT',
-            payload: { file: openFile, tabId, groupId: group.id, direction },
+            payload: { file: openFile, tabId, groupId: group.id, direction, newGroupFirst: zone === 'left' || zone === 'top' },
           })
         }
       } catch {
@@ -152,7 +152,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
         const direction = zoneToDirection(zone as EdgeZone)
         dispatch({
           type: 'SPLIT_WITH_TAB',
-          payload: { tabId, fromGroupId, toGroupId: group.id, direction },
+          payload: { tabId, fromGroupId, toGroupId: group.id, direction, newGroupFirst: zone === 'left' || zone === 'top' },
         })
       }
     }
