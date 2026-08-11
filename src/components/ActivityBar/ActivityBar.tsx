@@ -4,6 +4,7 @@ import type { ActivityType } from '../../types'
 const activities: { id: ActivityType; label: string; icon: string }[] = [
   { id: 'files', label: 'Explorer', icon: '📁' },
   { id: 'outline', label: 'Outline', icon: '📑' },
+  { id: 'settings', label: 'Settings', icon: '⚙️' },
 ]
 
 export function ActivityBar() {

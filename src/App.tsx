@@ -9,6 +9,7 @@ import { MainArea } from './components/MainArea'
 import { EmptyState } from './components/EmptyState'
 import { ErrorBanner } from './components/ErrorBanner'
 import { DragDropOverlay } from './components/DragDropOverlay'
+import { AIChatPanel } from './components/AIChat/AIChatPanel'
 
 function AppContent() {
   const { state } = useAppContext()
@@ -30,6 +31,7 @@ function AppContent() {
         <ActivityBar />
         {state.sidebarVisible && <Sidebar />}
         {hasOpenFiles ? <MainArea /> : <EmptyState />}
+        {state.showChatPanel && <AIChatPanel />}
       </AppShell>
 
       {/* Overlays */}

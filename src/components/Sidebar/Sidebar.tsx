@@ -1,6 +1,7 @@
 import { useAppContext } from '../../context/AppContext'
 import { FileTreePanel } from './FileTreePanel'
 import { OutlinePanel } from './OutlinePanel'
+import { SettingsPanel } from './SettingsPanel'
 
 export function Sidebar() {
   const { state, dispatch } = useAppContext()
@@ -9,13 +10,14 @@ export function Sidebar() {
     <div className="w-sidebar min-w-sidebar border-r border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex flex-col overflow-hidden select-none">
       {/* Panel Header */}
       <div className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-        {state.activeActivity === 'files' ? 'Explorer' : 'Outline'}
+        {state.activeActivity === 'files' ? 'Explorer' : state.activeActivity === 'outline' ? 'Outline' : 'Settings'}
       </div>
 
       {/* Panel Content */}
       <div className="flex-1 overflow-y-auto">
         {state.activeActivity === 'files' && <FileTreePanel />}
         {state.activeActivity === 'outline' && <OutlinePanel />}
+        {state.activeActivity === 'settings' && <SettingsPanel />}
       </div>
 
       {/* Dark Mode Toggle */}

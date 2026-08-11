@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react'
+import React, { useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { useAppContext } from '../../context/AppContext'
 
 interface MarkdownViewerProps {
   content: string
@@ -130,8 +131,21 @@ const COMPONENTS = {
 }
 
 export function MarkdownViewer({ content }: MarkdownViewerProps) {
+  const { dispatch } = useAppContext()
+
+  const handleMouseUp = useCallback(() => {
+    const selection = window.getSelection()
+    const text = selection?.toString()?.trim()
+    if (text && text.length > 0) {
+      dispatch({ type: 'SET_SELECTION', payload: { text } })
+    }
+  }, [dispatch])
+
   return (
-    <div className="markdown-body max-w-4xl mx-auto px-8 py-6 bg-white dark:bg-gray-900">
+    <div
+      className="markdown-body max-w-4xl mx-auto px-8 py-6 bg-white dark:bg-gray-900"
+      onMouseUp={handleMouseUp}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={COMPONENTS}

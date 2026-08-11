@@ -27,6 +27,11 @@ const initialState: AppState = {
   isDragOver: false,
   error: null,
   darkMode: localStorage.getItem('mdreader-dark-mode') === 'true',
+  apiEndpoint: '',
+  apiKey: '',
+  apiModel: '',
+  selectedText: null,
+  showChatPanel: false,
 }
 
 // ---- Apply layoutService result to state ----
@@ -154,6 +159,12 @@ function reducer(state: AppState, action: AppAction): AppState {
       localStorage.setItem('mdreader-dark-mode', String(next))
       return { ...state, darkMode: next }
     }
+    case 'SETTINGS_UPDATE':
+      return { ...state, apiEndpoint: action.payload.endpoint, apiKey: action.payload.apiKey, apiModel: action.payload.model }
+    case 'SET_SELECTION':
+      return { ...state, selectedText: action.payload.text, showChatPanel: action.payload.text !== null }
+    case 'TOGGLE_CHAT_PANEL':
+      return { ...state, showChatPanel: !state.showChatPanel }
     default:
       return state
   }

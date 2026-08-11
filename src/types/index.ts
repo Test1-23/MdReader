@@ -71,7 +71,7 @@ export type SplitPosition = 'left' | 'right' | 'top' | 'bottom'
 
 // ---- App State ----
 
-export type ActivityType = 'files' | 'outline'
+export type ActivityType = 'files' | 'outline' | 'settings'
 
 export interface AppState {
   // Activity Bar
@@ -95,6 +95,15 @@ export interface AppState {
   isDragOver: boolean
   error: string | null
   darkMode: boolean
+
+  // Settings
+  apiEndpoint: string
+  apiKey: string
+  apiModel: string
+
+  // AI Chat
+  selectedText: string | null
+  showChatPanel: boolean
 }
 
 // ---- App Actions ----
@@ -130,6 +139,9 @@ export type AppAction =
   | { type: 'SET_DRAG_OVER'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'TOGGLE_DARK_MODE' }
+  | { type: 'SETTINGS_UPDATE'; payload: { endpoint: string; apiKey: string; model: string } }
+  | { type: 'SET_SELECTION'; payload: { text: string | null } }
+  | { type: 'TOGGLE_CHAT_PANEL' }
 
 // ---- Layout Helper ----
 

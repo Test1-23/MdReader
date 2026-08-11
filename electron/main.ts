@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { registerFileHandlers } from './ipc/fileHandlers'
 import { registerDialogHandlers } from './ipc/dialogHandlers'
+import { registerSettingsHandlers } from './ipc/settingsHandlers'
+import { registerAiHandlers } from './ipc/aiHandlers'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -23,6 +25,8 @@ function createWindow() {
   // Register IPC handlers
   registerFileHandlers(ipcMain)
   registerDialogHandlers(ipcMain, mainWindow)
+  registerSettingsHandlers(ipcMain)
+  registerAiHandlers(ipcMain)
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
