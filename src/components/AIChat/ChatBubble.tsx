@@ -9,33 +9,35 @@ interface ChatBubbleProps {
 export function ChatBubble({ node, isActive, onClick }: ChatBubbleProps) {
   const isUser = node.role === 'user'
   return (
-    <div
-      onClick={onClick}
-      className={`
-        px-3 py-2 cursor-pointer border-l-2 transition-colors text-xs
-        ${isActive
-          ? 'border-l-blue-500 bg-blue-50 dark:bg-blue-900/20'
-          : 'border-l-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
-        }
-      `}
-    >
-      <div className="flex items-center gap-1.5 mb-0.5">
-        <span className="text-sm">{isUser ? '👤' : '🤖'}</span>
-        <span className="font-semibold text-gray-600 dark:text-gray-400">
-          {isUser ? 'You' : 'AI'}
-        </span>
-        <span className="text-gray-400 dark:text-gray-600 text-[10px]">
-          {new Date(node.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
-      </div>
-      <p className="text-gray-700 dark:text-gray-300 line-clamp-2 whitespace-pre-wrap">
-        {node.content.slice(0, 120)}
-      </p>
-      {node.selectedText && (
-        <div className="mt-1 text-[10px] text-gray-400 dark:text-gray-600 italic">
-          📎 {node.selectedText.slice(0, 40)}...
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} px-3 py-1.5`}>
+      <div
+        onClick={onClick}
+        className={`
+          max-w-[85%] px-3 py-2 rounded-lg text-xs cursor-pointer
+          ${isUser
+            ? 'bg-blue-500 text-white rounded-br-none'
+            : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-none'
+          }
+          ${isActive ? 'ring-2 ring-blue-400' : ''}
+        `}
+      >
+        {/* 头部：角色 + 时间 */}
+        <div className="flex items-center gap-1.5 mb-1 opacity-70">
+          <span>{isUser ? '👤' : '🤖'}</span>
+          <span className="font-semibold">{isUser ? 'You' : 'AI'}</span>
+          <span className="text-[10px]">
+            {new Date(node.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
         </div>
-      )}
+        {/* 选中文本引用块 */}
+        {node.selectedText && (
+          <div className="mb-1.5 p-1.5 bg-black/10 dark:bg-white/10 rounded text-[10px] italic whitespace-pre-wrap">
+            {node.selectedText}
+          </div>
+        )}
+        {/* 完整内容 */}
+        <div className="whitespace-pre-wrap break-words">{node.content}</div>
+      </div>
     </div>
   )
 }

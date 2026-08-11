@@ -2,26 +2,35 @@ import { useState, useCallback } from 'react'
 import { useAppContext } from '../../context/AppContext'
 import { createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages } from '../../utils/conversationTree'
 import type { Conversation } from '../../utils/conversationTree'
-import { ConversationTree } from './ConversationTree'
+import { ChatView } from './ChatView'
+import { ChatTreeView } from './ChatTreeView'
 import { ChatInput } from './ChatInput'
 
+type ChatViewMode = 'chat' | 'tree'
+
+const positionClasses: Record<string, string> = {
+  right: 'border-l border-gray-300 dark:border-gray-700 w-80 min-w-[240px]',
+  left: 'border-r border-gray-300 dark:border-gray-700 w-80 min-w-[240px]',
+  bottom: 'border-t border-gray-300 dark:border-gray-700 h-60 w-full',
+}
+
 export function AIChatPanel() {
-  const { state } = useAppContext()
+  const { state, dispatch } = useAppContext()
   const [conv, setConv] = useState<Conversation>(() => createConversation())
   const [loading, setLoading] = useState(false)
+  const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
 
   const selectedText = state.selectedText
+  const position = state.chatPosition
 
   const handleSend = useCallback(async (message: string) => {
     if (!state.apiEndpoint || !state.apiKey || !state.apiModel) {
-      // No API config — just log
       console.warn('AI Chat: No API config set')
       return
     }
 
     setLoading(true)
 
-    // Add user node
     const updated = addUserNode(conv, message, selectedText || undefined)
     setConv(updated)
 
@@ -38,14 +47,12 @@ export function AIChatPanel() {
       if (window.electronAPI?.aiChat) {
         reply = await window.electronAPI.aiChat(messages as any, config)
       } else {
-        // Fallback for browser dev mode
         reply = `[DEV MODE] AI not available. You asked: "${message}"\n\nSelected text: "${selectedText?.slice(0, 100) || 'none'}"`
       }
 
       const withReply = addAssistantNode(updated, reply)
       setConv(withReply)
 
-      // Save conversation
       if (window.electronAPI?.saveConversation) {
         window.electronAPI.saveConversation(withReply.id, withReply)
       }
@@ -62,13 +69,79 @@ export function AIChatPanel() {
     setConv((prev) => switchBranch(prev, nodeId))
   }, [])
 
+  // 树形图点击节点 → 切换到该分支并回到聊天视图
+  const handleSelectTreeNode = useCallback((nodeId: string) => {
+    setConv((prev) => switchBranch(prev, nodeId))
+    setViewMode('chat')
+  }, [])
+
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900 border-l border-gray-300 dark:border-gray-700 w-80 min-w-[240px]">
+    <div className={`${positionClasses[position]} bg-white dark:bg-gray-900 flex flex-col`}>
       {/* Header */}
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-        <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400">
+      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 flex-1">
           💬 AI Chat
         </h3>
+
+        {/* 视图切换 */}
+        <div className="flex gap-0.5">
+          <button
+            onClick={() => setViewMode('chat')}
+            className={`
+              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
+              ${viewMode === 'chat' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}
+            `}
+            title="Chat View"
+          >
+            💬
+          </button>
+          <button
+            onClick={() => setViewMode('tree')}
+            className={`
+              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
+              ${viewMode === 'tree' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}
+            `}
+            title="Tree View"
+          >
+            🌳
+          </button>
+        </div>
+
+        {/* 位置选择器 */}
+        <div className="flex gap-0.5">
+          <button
+            onClick={() => dispatch({ type: 'SET_CHAT_POSITION', payload: 'left' })}
+            className={`
+              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
+              ${position === 'left' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}
+            `}
+            title="Left"
+          >
+            ⇠
+          </button>
+          <button
+            onClick={() => dispatch({ type: 'SET_CHAT_POSITION', payload: 'right' })}
+            className={`
+              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
+              ${position === 'right' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}
+            `}
+            title="Right"
+          >
+            ⇢
+          </button>
+          <button
+            onClick={() => dispatch({ type: 'SET_CHAT_POSITION', payload: 'bottom' })}
+            className={`
+              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
+              ${position === 'bottom' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}
+            `}
+            title="Bottom"
+          >
+            ⇣
+          </button>
+        </div>
+
+        {/* 新建对话 */}
         <button
           onClick={() => setConv(createConversation())}
           className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
@@ -78,12 +151,20 @@ export function AIChatPanel() {
         </button>
       </div>
 
-      {/* Conversation Tree */}
-      <ConversationTree
-        conv={conv}
-        activeNodeId={conv.activeNodeId}
-        onSwitchBranch={handleSwitchBranch}
-      />
+      {/* 视图内容 */}
+      {viewMode === 'chat' ? (
+        <ChatView
+          conv={conv}
+          activeNodeId={conv.activeNodeId}
+          onSwitchBranch={handleSwitchBranch}
+        />
+      ) : (
+        <ChatTreeView
+          conv={conv}
+          activeNodeId={conv.activeNodeId}
+          onSelectNode={handleSelectTreeNode}
+        />
+      )}
 
       {/* Input */}
       <ChatInput

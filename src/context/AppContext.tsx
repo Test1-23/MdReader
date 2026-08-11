@@ -32,6 +32,7 @@ const initialState: AppState = {
   apiModel: '',
   selectedText: null,
   showChatPanel: false,
+  chatPosition: (localStorage.getItem('mdreader-chat-position') as 'right' | 'left' | 'bottom') || 'right',
 }
 
 // ---- Apply layoutService result to state ----
@@ -165,6 +166,10 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, selectedText: action.payload.text, showChatPanel: action.payload.text !== null }
     case 'TOGGLE_CHAT_PANEL':
       return { ...state, showChatPanel: !state.showChatPanel }
+    case 'SET_CHAT_POSITION': {
+      localStorage.setItem('mdreader-chat-position', action.payload)
+      return { ...state, chatPosition: action.payload }
+    }
     default:
       return state
   }

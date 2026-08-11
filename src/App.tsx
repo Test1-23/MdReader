@@ -26,13 +26,20 @@ function AppContent() {
   const hasOpenFiles = state.layoutRoot !== null && state.openFiles && Object.keys(state.openFiles).length > 0
 
   return (
-    <div className="h-full w-full flex flex-col overflow-hidden bg-white dark:bg-gray-900">
+    <div className="h-full w-full flex flex-col overflow-hidden relative bg-white dark:bg-gray-900">
       <AppShell>
         <ActivityBar />
         {state.sidebarVisible && <Sidebar />}
         {hasOpenFiles ? <MainArea /> : <EmptyState />}
-        {state.showChatPanel && <AIChatPanel />}
+        {state.showChatPanel && state.chatPosition !== 'bottom' && <AIChatPanel />}
       </AppShell>
+
+      {/* Bottom-positioned chat panel */}
+      {state.showChatPanel && state.chatPosition === 'bottom' && (
+        <div className="absolute bottom-0 left-0 right-0 h-60 z-20 flex">
+          <AIChatPanel />
+        </div>
+      )}
 
       {/* Overlays */}
       {state.isDragOver && <DragDropOverlay />}

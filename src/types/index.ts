@@ -104,6 +104,7 @@ export interface AppState {
   // AI Chat
   selectedText: string | null
   showChatPanel: boolean
+  chatPosition: 'right' | 'left' | 'bottom'
 }
 
 // ---- App Actions ----
@@ -142,6 +143,7 @@ export type AppAction =
   | { type: 'SETTINGS_UPDATE'; payload: { endpoint: string; apiKey: string; model: string } }
   | { type: 'SET_SELECTION'; payload: { text: string | null } }
   | { type: 'TOGGLE_CHAT_PANEL' }
+  | { type: 'SET_CHAT_POSITION'; payload: 'right' | 'left' | 'bottom' }
 
 // ---- Layout Helper ----
 

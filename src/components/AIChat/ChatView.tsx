@@ -1,0 +1,52 @@
+import type { Conversation, ChatNode } from '../../utils/conversationTree'
+import { getActivePath } from '../../utils/conversationTree'
+import { ChatBubble } from './ChatBubble'
+
+interface ChatViewProps {
+  conv: Conversation
+  activeNodeId: string | null
+  onSwitchBranch: (nodeId: string) => void
+}
+
+// 找到 node 下不在活跃路径上的子节点（即分支点）
+function getBranchEntries(conv: Conversation, nodeId: string, activePathIds: Set<string>): ChatNode[] {
+  const node = conv.nodes[nodeId]
+  if (!node) return []
+  return node.childrenIds
+    .map((id) => conv.nodes[id])
+    .filter((child): child is ChatNode => !!child && !activePathIds.has(child.id))
+}
+
+export function ChatView({ conv, activeNodeId, onSwitchBranch }: ChatViewProps) {
+  const activePath = getActivePath(conv)
+  const activePathIds = new Set(activePath.map((n) => n.id))
+
+  return (
+    <div className="flex-1 overflow-y-auto py-2">
+      {activePath.length === 0 && (
+        <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-600">
+          No messages yet. Select text in the document to start.
+        </div>
+      )}
+      {activePath.map((node) => (
+        <div key={node.id}>
+          <ChatBubble
+            node={node}
+            isActive={node.id === activeNodeId}
+            onClick={() => onSwitchBranch(node.id)}
+          />
+          {/* 非活跃分支入口 */}
+          {getBranchEntries(conv, node.id, activePathIds).map((branch) => (
+            <button
+              key={branch.id}
+              onClick={() => onSwitchBranch(branch.id)}
+              className="ml-8 my-0.5 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+            >
+              ↪ 分支 {new Date(branch.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
