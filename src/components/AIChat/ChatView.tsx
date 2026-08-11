@@ -51,7 +51,6 @@ export function ChatView({ conv, activeNodeId, onSwitchBranch, onCopy, onRegener
           <ChatBubble
             node={node}
             isActive={node.id === activeNodeId}
-            onClick={() => onSwitchBranch(node.id)}
             onCopy={onCopy}
             onRegenerate={onRegenerate}
             onEdit={handleEditConfirm}

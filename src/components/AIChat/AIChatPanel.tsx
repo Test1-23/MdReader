@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useAppContext } from '../../context/AppContext'
 import {
   createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages,
@@ -11,10 +11,20 @@ import { ChatInput } from './ChatInput'
 
 type ChatViewMode = 'chat' | 'tree'
 
+const MIN_WIDTH = 240
+const MAX_WIDTH = 600
+const MIN_HEIGHT = 160
+const MAX_HEIGHT = 600
+
+function loadSavedSize(): number {
+  const saved = parseInt(localStorage.getItem('mdreader-chat-width') || '', 10)
+  return saved >= MIN_WIDTH && saved <= MAX_WIDTH ? saved : 320
+}
+
 const positionClasses: Record<string, string> = {
-  right: 'border-l border-gray-300 dark:border-gray-700 w-80 min-w-[240px]',
-  left: 'border-r border-gray-300 dark:border-gray-700 w-80 min-w-[240px]',
-  bottom: 'border-t border-gray-300 dark:border-gray-700 h-60 w-full',
+  right: 'border-l border-gray-300 dark:border-gray-700',
+  left: 'border-r border-gray-300 dark:border-gray-700',
+  bottom: 'border-t border-gray-300 dark:border-gray-700 w-full',
 }
 
 export function AIChatPanel() {
@@ -22,9 +32,44 @@ export function AIChatPanel() {
   const [conv, setConv] = useState<Conversation>(() => createConversation())
   const [loading, setLoading] = useState(false)
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
+  const [width, setWidth] = useState(loadSavedSize)
+  const [height, setHeight] = useState(240)
+  const dragRef = useRef<{ start: number; startSize: number; axis: 'x' | 'y' } | null>(null)
 
   const selectedText = state.selectedText
   const position = state.chatPosition
+
+  // ---- VS Code 风格拖拽调节尺寸 ----
+  const startResize = useCallback((e: React.MouseEvent, axis: 'x' | 'y') => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragRef.current = {
+      start: axis === 'x' ? e.clientX : e.clientY,
+      startSize: axis === 'x' ? width : height,
+      axis,
+    }
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return
+      const { start, startSize, axis: a } = dragRef.current
+      let delta = a === 'x' ? ev.clientX - start : ev.clientY - start
+      if (a === 'x' && position === 'left') delta = -delta // left 面板往左拖变宽
+      const size = a === 'x'
+        ? Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startSize + delta))
+        : Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, startSize + delta))
+      dragRef.current.startSize = size
+      if (a === 'x') setWidth(size)
+      else setHeight(size)
+    }
+    const onUp = () => {
+      const final = dragRef.current?.startSize
+      dragRef.current = null
+      if (final !== undefined) localStorage.setItem('mdreader-chat-width', String(final))
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [width, height, position])
 
   const handleSend = useCallback(async (message: string) => {
     setLoading(true)
@@ -169,8 +214,34 @@ export function AIChatPanel() {
     }
   }, [conv, state.apiEndpoint, state.apiKey, state.apiModel, requestAiForUserNode])
 
+  const isBottom = position === 'bottom'
+  const sizeStyle = isBottom
+    ? { height: `${height}px` }
+    : { width: `${width}px` }
+
   return (
-    <div className={`${positionClasses[position]} bg-white dark:bg-gray-900 flex flex-col`}>
+    <div
+      className={`relative ${positionClasses[position]} bg-white dark:bg-gray-900 flex flex-col`}
+      style={sizeStyle}
+    >
+      {/* 拖拽调节 handle（VS Code 风格） */}
+      {isBottom ? (
+        <div
+          onMouseDown={(e) => startResize(e, 'y')}
+          className="absolute top-0 left-0 right-0 h-1 cursor-row-resize bg-gray-300 dark:bg-gray-700 hover:bg-blue-400 dark:hover:bg-blue-500 transition-colors"
+          title="拖拽调整高度"
+        />
+      ) : (
+        <div
+          onMouseDown={(e) => startResize(e, 'x')}
+          className={`
+            absolute top-0 bottom-0 w-1 cursor-col-resize
+            bg-gray-300 dark:bg-gray-700 hover:bg-blue-400 dark:hover:bg-blue-500 transition-colors
+            ${position === 'right' ? '-left-0.5' : '-right-0.5'}
+          `}
+          title="拖拽调整宽度"
+        />
+      )}
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
         <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 flex-1">

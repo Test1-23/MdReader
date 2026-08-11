@@ -10,8 +10,11 @@ interface ChatTreeViewProps {
   onSelectNode: (nodeId: string) => void
 }
 
+const LABEL_MAX = 12 // 节点上只显示用户消息开头几个字
+
 export function ChatTreeView({ conv, activeNodeId, onSelectNode }: ChatTreeViewProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
+  const [hoveredNode, setHoveredNode] = useState<TreeLayoutNode | null>(null)
 
   const activePath = getActivePath(conv)
   const activePathIds = new Set(activePath.map((n) => n.id))
@@ -39,13 +42,15 @@ export function ChatTreeView({ conv, activeNodeId, onSelectNode }: ChatTreeViewP
   const renderNode = (node: TreeLayoutNode) => {
     const isActive = activePathIds.has(node.id)
     const isCurrent = node.id === activeNodeId
-    const hasChildren = node.hasChildren && !node.collapsed
+    const isHovered = hoveredNode?.id === node.id
 
     return (
       <div
         key={node.id}
         className="absolute"
         style={{ left: node.x - NODE_RADIUS, top: node.y - NODE_RADIUS, width: 200 }}
+        onMouseEnter={() => setHoveredNode(node)}
+        onMouseLeave={() => setHoveredNode((prev) => (prev?.id === node.id ? null : prev))}
       >
         {/* 折叠按钮 */}
         {node.hasChildren && (
@@ -78,7 +83,7 @@ export function ChatTreeView({ conv, activeNodeId, onSelectNode }: ChatTreeViewP
           style={{ width: NODE_RADIUS * 2, height: NODE_RADIUS * 2, left: 0, top: 0 }}
         />
 
-        {/* 摘要文字（节点右侧） */}
+        {/* 短标签（节点右侧，仅用户消息开头几个字） */}
         <button
           onClick={() => onSelectNode(node.id)}
           className={`
@@ -89,14 +94,23 @@ export function ChatTreeView({ conv, activeNodeId, onSelectNode }: ChatTreeViewP
           `}
         >
           <div className={`text-[11px] truncate ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
-            👤 {node.user.content.slice(0, 40) || '(empty)'}
+            {node.user.content.slice(0, LABEL_MAX) || '(empty)'}
           </div>
-          {node.assistant && (
-            <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
-              🤖 {node.assistant.content.slice(0, 40)}
-            </div>
-          )}
         </button>
+
+        {/* Hover 详情浮层 */}
+        {isHovered && (
+          <div className="absolute left-6 top-3 z-20 w-64 max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-2 text-[11px]">
+            <div className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
+              <span className="font-semibold">👤 </span>{node.user.content}
+            </div>
+            {node.assistant && (
+              <div className="mt-1.5 pt-1.5 border-t border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 whitespace-pre-wrap break-words">
+                <span className="font-semibold">🤖 </span>{node.assistant.content}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     )
   }

@@ -101,10 +101,10 @@ export function computeTreeLayout(
 
     if (!collapsed) {
       children.forEach((child, i) => {
-        // First child: main chain — down one row, same column
-        // Other children: branches — same row as parent, one column right (parallel)
-        const childColumn = i === 0 ? column : column + 1
-        const childRow = i === 0 ? row + 1 : row
+        // All children spread on the SAME row below the parent (columns
+        // increment left to right) — multiple children don't stack vertically.
+        const childColumn = column + i
+        const childRow = row + 1
         const childNode = walk(child, childColumn, childRow)
         layoutNode.children.push(childNode)
         edges.push({

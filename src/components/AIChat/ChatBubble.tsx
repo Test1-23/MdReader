@@ -4,7 +4,6 @@ import type { ChatNode } from '../../utils/conversationTree'
 interface ChatBubbleProps {
   node: ChatNode
   isActive: boolean
-  onClick: () => void
   onCopy: (nodeId: string) => void
   onRegenerate: (nodeId: string) => void
   onEdit: (nodeId: string, newText: string) => void
@@ -16,7 +15,6 @@ interface ChatBubbleProps {
 export function ChatBubble({
   node,
   isActive,
-  onClick,
   onCopy,
   onRegenerate,
   onEdit,
@@ -61,9 +59,8 @@ export function ChatBubble({
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} px-3 py-1.5`}>
       <div className={`max-w-[85%] ${isUser ? 'flex flex-col items-end' : 'flex flex-col items-start'}`}>
         <div
-          onClick={onClick}
           className={`
-            px-3 py-2 rounded-lg text-xs cursor-pointer w-full
+            px-3 py-2 rounded-lg text-xs w-full
             ${isUser
               ? 'bg-blue-500 text-white rounded-br-none'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-none'
