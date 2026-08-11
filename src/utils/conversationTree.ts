@@ -147,6 +147,28 @@ export function getSiblings(conv: Conversation, nodeId: string): ChatNode[] {
   return getChildren(conv, node.parentId)
 }
 
+// ---- Tree View Helpers ----
+
+// 获取 user 节点的 AI 回复（第一个 assistant 子节点）
+export function getAssistantReply(conv: Conversation, userNodeId: string): ChatNode | null {
+  const node = conv.nodes[userNodeId]
+  if (!node) return null
+  for (const childId of node.childrenIds) {
+    const child = conv.nodes[childId]
+    if (child && child.role === 'assistant') return child
+  }
+  return null
+}
+
+// 获取 user 节点的 user 子节点（下一层分支起点）
+export function getUserChildren(conv: Conversation, userNodeId: string): ChatNode[] {
+  const node = conv.nodes[userNodeId]
+  if (!node) return []
+  return node.childrenIds
+    .map((id) => conv.nodes[id])
+    .filter((c): c is ChatNode => !!c && c.role === 'user')
+}
+
 // ---- Build Messages for API ----
 
 export function buildMessages(
