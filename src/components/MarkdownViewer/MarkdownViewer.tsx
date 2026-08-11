@@ -131,7 +131,7 @@ const COMPONENTS = {
 
 export function MarkdownViewer({ content }: MarkdownViewerProps) {
   return (
-    <div className="markdown-body max-w-4xl mx-auto px-8 py-6">
+    <div className="markdown-body max-w-4xl mx-auto px-8 py-6 bg-white dark:bg-gray-900">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={COMPONENTS}

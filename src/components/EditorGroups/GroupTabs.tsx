@@ -68,7 +68,7 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
       {/* Context Menu */}
       {contextMenu && (
         <div
-          className="fixed bg-white border border-gray-300 rounded shadow-lg py-1 z-50 text-sm"
+          className="fixed bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-lg py-1 z-50 text-sm"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <div

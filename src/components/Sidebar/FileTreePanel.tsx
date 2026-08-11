@@ -135,7 +135,7 @@ export function FileTreePanel() {
             >
               {/* Expand/collapse arrow for directories */}
               {node.isDirectory && (
-                <span className="w-4 text-xs text-gray-500 flex-shrink-0">
+                <span className="w-4 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 flex-shrink-0">
                   {expandedDirs.has(node.path) ? '▼' : '▶'}
                 </span>
               )}
@@ -150,7 +150,7 @@ export function FileTreePanel() {
               </span>
 
               {/* Name */}
-              <span className="truncate text-gray-700">
+              <span className="truncate text-gray-700 dark:text-gray-300">
                 {node.name}
               </span>
             </div>
@@ -168,17 +168,17 @@ export function FileTreePanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-2 py-2 border-b border-sidebar-border">
+      <div className="flex items-center gap-1 px-2 py-2 border-b border-gray-300 dark:border-gray-700">
         <button
           onClick={handleOpenFolder}
-          className="flex-1 px-3 py-1.5 text-xs bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"
+          className="flex-1 px-3 py-1.5 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 dark:text-gray-300 transition-colors"
           title="Open Folder"
         >
           📂 Open Folder
         </button>
         <button
           onClick={handleOpenFileDialog}
-          className="px-3 py-1.5 text-xs bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"
+          className="px-3 py-1.5 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 dark:text-gray-300 transition-colors"
           title="Open File"
         >
           📄
@@ -188,15 +188,15 @@ export function FileTreePanel() {
       {/* File Tree or Empty State */}
       <div className="flex-1 overflow-y-auto py-1">
         {state.sidebarLoading && (
-          <div className="px-4 py-2 text-xs text-gray-500">Loading...</div>
+          <div className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Loading...</div>
         )}
         {!state.fileTree && !state.sidebarLoading && (
-          <div className="px-4 py-8 text-center text-xs text-gray-400">
+          <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
             Open a folder to browse markdown files
           </div>
         )}
         {state.fileTree && state.fileTree.length === 0 && !state.sidebarLoading && (
-          <div className="px-4 py-8 text-center text-xs text-gray-400">
+          <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
             No markdown files found in this folder
           </div>
         )}
@@ -205,7 +205,7 @@ export function FileTreePanel() {
 
       {/* Root path */}
       {state.fileTreeRoot && (
-        <div className="px-3 py-2 text-xs text-gray-400 border-t border-sidebar-border truncate">
+        <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500 border-t border-sidebar-border truncate">
           {state.fileTreeRoot}
         </div>
       )}

@@ -19,7 +19,7 @@ export function OutlinePanel() {
 
   if (!activeFile) {
     return (
-      <div className="px-4 py-8 text-center text-xs text-gray-400">
+      <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
         Open a markdown file to see its outline
       </div>
     )
@@ -27,7 +27,7 @@ export function OutlinePanel() {
 
   if (headings.length === 0) {
     return (
-      <div className="px-4 py-8 text-center text-xs text-gray-400">
+      <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
         No headings found in this document
       </div>
     )
@@ -56,11 +56,11 @@ export function OutlinePanel() {
           <button
             key={id}
             onClick={() => handleClick(heading.text)}
-            className="w-full text-left px-2 py-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm text-gray-700 truncate block transition-colors"
+            className="w-full text-left px-2 py-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-300 truncate block transition-colors"
             style={{ paddingLeft: `${8 + (heading.level - 1) * 16}px` }}
             title={heading.text}
           >
-            <span className="text-gray-400 mr-1">H{heading.level}</span>
+            <span className="text-gray-400 dark:text-gray-500 mr-1">H{heading.level}</span>
             {heading.text}
           </button>
         )

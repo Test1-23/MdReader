@@ -220,7 +220,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden bg-white dark:bg-gray-900">
         {activeTab ? (
           <GroupContent tab={activeTab} />
         ) : (
