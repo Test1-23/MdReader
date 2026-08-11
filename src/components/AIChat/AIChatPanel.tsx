@@ -24,15 +24,19 @@ export function AIChatPanel() {
   const position = state.chatPosition
 
   const handleSend = useCallback(async (message: string) => {
-    if (!state.apiEndpoint || !state.apiKey || !state.apiModel) {
-      console.warn('AI Chat: No API config set')
-      return
-    }
-
     setLoading(true)
 
+    // Always add the user node first — the message must be visible
     const updated = addUserNode(conv, message, selectedText || undefined)
     setConv(updated)
+
+    // Missing API config → show a helpful message instead of silently failing
+    if (!state.apiEndpoint || !state.apiKey || !state.apiModel) {
+      const hint = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
+      setConv(addAssistantNode(updated, hint))
+      setLoading(false)
+      return
+    }
 
     try {
       const messages = buildMessages(updated, updated.activeNodeId!, message, selectedText || undefined)

@@ -186,6 +186,18 @@ const AppContext = createContext<AppContextType | null>(null)
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState)
+
+  // Preload API config on startup so AI Chat works without opening Settings first
+  React.useEffect(() => {
+    if (window.electronAPI?.loadApiConfig) {
+      window.electronAPI.loadApiConfig().then((config) => {
+        if (config && config.endpoint) {
+          dispatch({ type: 'SETTINGS_UPDATE', payload: config })
+        }
+      }).catch(() => { /* no config file */ })
+    }
+  }, [])
+
   return (
     <AppContext.Provider value={{ state, dispatch }}>
       {children}
