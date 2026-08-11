@@ -54,13 +54,20 @@ export function computeTreeLayout(
   activePathIds: Set<string>,
   collapsedIds: Set<string>
 ): TreeLayout {
-  // Collect all user nodes that are roots (no parent user node)
-  const allUserNodes = Object.values(conv.nodes).filter((n) => n.role === 'user')
-  const userNodeIds = new Set(allUserNodes.map((n) => n.id))
-  const rootNodes = allUserNodes.filter((n) => {
-    // A root user node has no parent, or its parent is not a user node
-    return !n.parentId || !userNodeIds.has(n.parentId)
-  })
+  // Single root: conv.rootId points to the first user node.
+  // Do NOT treat "parent is an assistant node" as a root — messages sent after
+  // backtracking to an AI reply hang under the assistant node and must stay
+  // connected to the same tree (getUserChildren flattens that layer).
+  const rootNodes: ChatNode[] = []
+  if (conv.rootId && conv.nodes[conv.rootId]) {
+    rootNodes.push(conv.nodes[conv.rootId])
+  } else {
+    // Fallback: user nodes with no parent at all
+    const allUserNodes = Object.values(conv.nodes).filter((n) => n.role === 'user')
+    for (const n of allUserNodes) {
+      if (!n.parentId || !conv.nodes[n.parentId]) rootNodes.push(n)
+    }
+  }
 
   const result: TreeLayoutNode[] = []
   const edges: TreeEdge[] = []
