@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAppContext } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
 import { readDroppedFile, generateTabId } from '../../utils/fileReader'
@@ -46,6 +46,13 @@ export function EditorGroup({ group }: EditorGroupProps) {
 
   const [dropZone, setDropZone] = useState<DropZone>(null)
 
+  // Clear highlight when drag ends (cancelled without drop)
+  useEffect(() => {
+    const clear = () => setDropZone(null)
+    window.addEventListener('dragend', clear)
+    return () => window.removeEventListener('dragend', clear)
+  }, [])
+
   const handleFocus = useCallback(() => {
     if (!isActive) {
       dispatch({ type: 'SET_ACTIVE_GROUP', payload: { groupId: group.id } })
@@ -64,10 +71,12 @@ export function EditorGroup({ group }: EditorGroupProps) {
     setDropZone(computeZone(e))
   }, [])
 
-  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setDropZone(null)
-    }
+  // Don't clear drop zone on leave — rely on dragover from parent/sibling to update.
+  // The zone is cleared in handleDrop and on the next dragOver in a different group.
+  // This prevents the highlight from disappearing when the mouse is at the very edge
+  // of the element (especially left/top window boundaries).
+  const handleDragLeave = useCallback((_e: React.DragEvent<HTMLDivElement>) => {
+    // Intentionally no-op — zone persists until drop or next dragover
   }, [])
 
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
