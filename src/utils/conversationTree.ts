@@ -147,6 +147,24 @@ export function getSiblings(conv: Conversation, nodeId: string): ChatNode[] {
   return getChildren(conv, node.parentId)
 }
 
+// ---- Content Operations ----
+
+// 替换任意节点内容（用于编辑/重新生成）
+export function replaceNodeContent(conv: Conversation, nodeId: string, newContent: string): Conversation {
+  const node = conv.nodes[nodeId]
+  if (!node) return conv
+  const nodes = { ...conv.nodes, [nodeId]: { ...node, content: newContent } }
+  return { ...conv, nodes, updatedAt: Date.now() }
+}
+
+// 替换 user 节点下的第一个 AI 回复内容（重新生成）
+export function replaceAssistantReply(conv: Conversation, userNodeId: string, newContent: string): Conversation {
+  const reply = getAssistantReply(conv, userNodeId)
+  if (!reply) return conv
+  const nodes = { ...conv.nodes, [reply.id]: { ...reply, content: newContent } }
+  return { ...conv, nodes, activeNodeId: reply.id, updatedAt: Date.now() }
+}
+
 // ---- Tree View Helpers ----
 
 // 获取 user 节点的 AI 回复（第一个 assistant 子节点）

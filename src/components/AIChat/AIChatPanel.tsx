@@ -1,6 +1,9 @@
 import { useState, useCallback } from 'react'
 import { useAppContext } from '../../context/AppContext'
-import { createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages, getAssistantReply } from '../../utils/conversationTree'
+import {
+  createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages,
+  getAssistantReply, replaceNodeContent, replaceAssistantReply,
+} from '../../utils/conversationTree'
 import type { Conversation } from '../../utils/conversationTree'
 import { ChatView } from './ChatView'
 import { ChatTreeView } from './ChatTreeView'
@@ -81,6 +84,90 @@ export function AIChatPanel() {
     })
     setViewMode('chat')
   }, [])
+
+  // ---- 复制 ----
+  const handleCopy = useCallback(async (nodeId: string) => {
+    const node = conv.nodes[nodeId]
+    if (!node) return
+    try {
+      await navigator.clipboard.writeText(node.content)
+    } catch {
+      console.warn('Copy failed')
+    }
+  }, [conv])
+
+  // ---- 通用：为该 user 节点请求 AI 并覆盖/添加回复 ----
+  const requestAiForUserNode = useCallback(async (currentConv: Conversation, userNodeId: string): Promise<Conversation> => {
+    const userNode = currentConv.nodes[userNodeId]
+    if (!userNode) return currentConv
+    const messages = buildMessages(currentConv, userNodeId, userNode.content, userNode.selectedText)
+
+    let reply: string
+    if (window.electronAPI?.aiChat) {
+      const config = { endpoint: state.apiEndpoint, apiKey: state.apiKey, model: state.apiModel }
+      reply = await window.electronAPI.aiChat(messages as any, config)
+    } else {
+      reply = `[DEV MODE] AI not available. You asked: "${userNode.content.slice(0, 100)}"`
+    }
+
+    const existingReply = getAssistantReply(currentConv, userNodeId)
+    return existingReply
+      ? replaceAssistantReply(currentConv, userNodeId, reply)
+      : addAssistantNode(currentConv, reply, userNodeId)
+  }, [state.apiEndpoint, state.apiKey, state.apiModel])
+
+  // ---- 重发 / 重新生成 ----
+  const handleRegenerate = useCallback(async (nodeId: string) => {
+    // 解析出 user 节点：assistant 节点取其父 user 节点
+    const node = conv.nodes[nodeId]
+    if (!node) return
+    const userNodeId = node.role === 'user'
+      ? node.id
+      : (node.parentId && conv.nodes[node.parentId]?.role === 'user' ? node.parentId : null)
+    if (!userNodeId) return
+
+    setLoading(true)
+    try {
+      const withReply = await requestAiForUserNode(conv, userNodeId)
+      setConv(withReply)
+      if (window.electronAPI?.saveConversation) {
+        window.electronAPI.saveConversation(withReply.id, withReply)
+      }
+    } catch (err: any) {
+      const errorMsg = `Error: ${err.message || 'Unknown error'}`
+      const withError = replaceAssistantReply(conv, userNodeId, errorMsg)
+      setConv(withError)
+    } finally {
+      setLoading(false)
+    }
+  }, [conv, requestAiForUserNode])
+
+  // ---- 编辑 + 重新发送 ----
+  const handleEdit = useCallback(async (nodeId: string, newText: string) => {
+    setLoading(true)
+    const updated = replaceNodeContent(conv, nodeId, newText)
+    setConv(updated)
+
+    if (!state.apiEndpoint || !state.apiKey || !state.apiModel) {
+      const hint = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
+      setConv(addAssistantNode(updated, hint, nodeId))
+      setLoading(false)
+      return
+    }
+
+    try {
+      const withReply = await requestAiForUserNode(updated, nodeId)
+      setConv(withReply)
+      if (window.electronAPI?.saveConversation) {
+        window.electronAPI.saveConversation(withReply.id, withReply)
+      }
+    } catch (err: any) {
+      const errorMsg = `Error: ${err.message || 'Unknown error'}`
+      setConv(replaceAssistantReply(updated, nodeId, errorMsg))
+    } finally {
+      setLoading(false)
+    }
+  }, [conv, state.apiEndpoint, state.apiKey, state.apiModel, requestAiForUserNode])
 
   return (
     <div className={`${positionClasses[position]} bg-white dark:bg-gray-900 flex flex-col`}>
@@ -164,6 +251,9 @@ export function AIChatPanel() {
           conv={conv}
           activeNodeId={conv.activeNodeId}
           onSwitchBranch={handleSwitchBranch}
+          onCopy={handleCopy}
+          onRegenerate={handleRegenerate}
+          onEdit={handleEdit}
         />
       ) : (
         <ChatTreeView

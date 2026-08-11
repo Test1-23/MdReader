@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Conversation, ChatNode } from '../../utils/conversationTree'
 import { getActivePath } from '../../utils/conversationTree'
 import { ChatBubble } from './ChatBubble'
@@ -6,6 +7,9 @@ interface ChatViewProps {
   conv: Conversation
   activeNodeId: string | null
   onSwitchBranch: (nodeId: string) => void
+  onCopy: (nodeId: string) => void
+  onRegenerate: (nodeId: string) => void
+  onEdit: (nodeId: string, newText: string) => void
 }
 
 // 找到 node 下不在活跃路径上的子节点（即分支点）
@@ -17,9 +21,23 @@ function getBranchEntries(conv: Conversation, nodeId: string, activePathIds: Set
     .filter((child): child is ChatNode => !!child && !activePathIds.has(child.id))
 }
 
-export function ChatView({ conv, activeNodeId, onSwitchBranch }: ChatViewProps) {
+export function ChatView({ conv, activeNodeId, onSwitchBranch, onCopy, onRegenerate, onEdit }: ChatViewProps) {
   const activePath = getActivePath(conv)
   const activePathIds = new Set(activePath.map((n) => n.id))
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  const handleEditStart = (nodeId: string) => {
+    setEditingId(nodeId)
+  }
+
+  const handleEditCancel = () => {
+    setEditingId(null)
+  }
+
+  const handleEditConfirm = (nodeId: string, newText: string) => {
+    setEditingId(null)
+    onEdit(nodeId, newText)
+  }
 
   return (
     <div className="flex-1 overflow-y-auto py-2">
@@ -34,6 +52,11 @@ export function ChatView({ conv, activeNodeId, onSwitchBranch }: ChatViewProps) 
             node={node}
             isActive={node.id === activeNodeId}
             onClick={() => onSwitchBranch(node.id)}
+            onCopy={onCopy}
+            onRegenerate={onRegenerate}
+            onEdit={handleEditConfirm}
+            onEditCancel={handleEditCancel}
+            editing={editingId === node.id}
           />
           {/* 非活跃分支入口 */}
           {getBranchEntries(conv, node.id, activePathIds).map((branch) => (
