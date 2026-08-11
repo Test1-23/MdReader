@@ -56,7 +56,7 @@ export function OutlinePanel() {
           <button
             key={id}
             onClick={() => handleClick(heading.text)}
-            className="w-full text-left px-2 py-0.5 hover:bg-gray-200 text-sm text-gray-700 truncate block transition-colors"
+            className="w-full text-left px-2 py-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm text-gray-700 truncate block transition-colors"
             style={{ paddingLeft: `${8 + (heading.level - 1) * 16}px` }}
             title={heading.text}
           >

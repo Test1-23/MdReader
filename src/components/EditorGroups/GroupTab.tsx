@@ -31,8 +31,8 @@ export function GroupTab({ tab, groupId, isActive, onClick, onClose, onContextMe
         border-r border-gray-300 min-w-0 max-w-[200px]
         transition-colors duration-75
         ${isActive
-          ? 'bg-white text-gray-800 border-t-2 border-t-blue-500'
-          : 'bg-tab-inactive-bg text-gray-600 hover:bg-gray-100'
+          ? 'bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 border-t-2 border-t-blue-500'
+          : 'bg-[#ececec] dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
         }
       `}
       title={tab.filePath || tab.fileName}

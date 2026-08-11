@@ -26,6 +26,7 @@ const initialState: AppState = {
   sidebarVisible: true,
   isDragOver: false,
   error: null,
+  darkMode: localStorage.getItem('mdreader-dark-mode') === 'true',
 }
 
 // ---- Apply layoutService result to state ----
@@ -148,6 +149,11 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, isDragOver: action.payload }
     case 'SET_ERROR':
       return { ...state, error: action.payload }
+    case 'TOGGLE_DARK_MODE': {
+      const next = !state.darkMode
+      localStorage.setItem('mdreader-dark-mode', String(next))
+      return { ...state, darkMode: next }
+    }
     default:
       return state
   }

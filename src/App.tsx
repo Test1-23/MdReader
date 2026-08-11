@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { AppProvider, useAppContext } from './context/AppContext'
 import { useDragDrop } from './hooks/useDragDrop'
 import { usePasteHandler } from './hooks/usePasteHandler'
@@ -16,10 +17,15 @@ function AppContent() {
   useDragDrop()
   usePasteHandler()
 
+  // Apply dark mode class to <html>
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', state.darkMode)
+  }, [state.darkMode])
+
   const hasOpenFiles = state.layoutRoot !== null && state.openFiles && Object.keys(state.openFiles).length > 0
 
   return (
-    <div className="h-full w-full flex flex-col overflow-hidden bg-white">
+    <div className="h-full w-full flex flex-col overflow-hidden bg-white dark:bg-gray-900">
       <AppShell>
         <ActivityBar />
         {state.sidebarVisible && <Sidebar />}

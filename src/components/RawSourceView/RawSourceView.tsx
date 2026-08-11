@@ -6,7 +6,7 @@ export function RawSourceView({ content }: RawSourceViewProps) {
   const lines = content.split('\n')
 
   return (
-    <div className="h-full overflow-auto bg-gray-50 font-mono text-sm">
+    <div className="h-full overflow-auto bg-gray-50 dark:bg-gray-950 font-mono text-sm">
       <div className="flex">
         {/* Line numbers */}
         <div className="flex-shrink-0 py-3 select-none text-right text-gray-400 bg-gray-100 border-r border-gray-200">

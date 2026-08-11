@@ -45,7 +45,7 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
   return (
     <div
       className={`
-        flex items-end overflow-x-auto bg-gray-200 border-b border-gray-300
+        flex items-end overflow-x-auto bg-gray-200 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700
         ${isActive ? '' : 'opacity-90'}
       `}
       style={{ height: '36px' }}

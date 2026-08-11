@@ -113,7 +113,7 @@ export function FileTreePanel() {
           <div key={node.path}>
             <div
               className={`
-                flex items-center gap-1 px-2 py-0.5 cursor-pointer hover:bg-gray-200 text-sm
+                flex items-center gap-1 px-2 py-0.5 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 text-sm
                 ${depth > 0 ? 'pl-' + (depth * 16 + 8) : 'pl-2'}
               `}
               style={{ paddingLeft: `${depth * 16 + 8}px` }}

@@ -94,6 +94,7 @@ export interface AppState {
   sidebarVisible: boolean
   isDragOver: boolean
   error: string | null
+  darkMode: boolean
 }
 
 // ---- App Actions ----
@@ -128,6 +129,7 @@ export type AppAction =
   // UI
   | { type: 'SET_DRAG_OVER'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'TOGGLE_DARK_MODE' }
 
 // ---- Layout Helper ----
 

@@ -10,7 +10,7 @@ export function ActivityBar() {
   const { state, dispatch } = useAppContext()
 
   return (
-    <div className="w-activity min-w-activity flex flex-col items-center py-2 bg-activity-bg text-white select-none">
+    <div className="w-activity min-w-activity flex flex-col items-center py-2 bg-[#333333] dark:bg-gray-900 text-white select-none">
       {activities.map((activity) => (
         <button
           key={activity.id}

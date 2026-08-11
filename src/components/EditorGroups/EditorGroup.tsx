@@ -212,7 +212,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
             e.stopPropagation()
             dispatch({ type: 'CLOSE_GROUP', payload: { groupId: group.id } })
           }}
-          className="flex-shrink-0 w-7 flex items-center justify-center bg-gray-200 border-b border-gray-300 text-gray-400 hover:text-gray-700 hover:bg-gray-300 transition-colors text-sm"
+          className="flex-shrink-0 w-7 flex items-center justify-center bg-gray-200 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors text-sm"
           title="Close Group"
         >
           ×
@@ -224,7 +224,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
         {activeTab ? (
           <GroupContent tab={activeTab} />
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+          <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 text-sm">
             <div className="text-center">
               <p className="text-lg mb-2">No file open</p>
               <p className="text-xs">Open a file from the Explorer or drop a file here</p>
