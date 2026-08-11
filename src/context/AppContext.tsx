@@ -81,16 +81,16 @@ function reducer(state: AppState, action: AppAction): AppState {
       return applyLayoutResult(state, execute(state, { type: 'OPEN_FILE', file, tabId, groupId }))
     }
     case 'OPEN_FILE_AND_SPLIT': {
-      const { file, tabId, groupId, direction } = action.payload
-      return applyLayoutResult(state, execute(state, { type: 'OPEN_AND_SPLIT', file, tabId, groupId, direction }))
+      const { file, tabId, groupId, position } = action.payload
+      return applyLayoutResult(state, execute(state, { type: 'OPEN_AND_SPLIT', file, tabId, groupId, position }))
     }
     case 'SPLIT_GROUP': {
-      const { groupId, direction, tabId } = action.payload
-      return applyLayoutResult(state, execute(state, { type: 'SPLIT_GROUP', groupId, direction, tabId }))
+      const { groupId, position, tabId } = action.payload
+      return applyLayoutResult(state, execute(state, { type: 'SPLIT_GROUP', groupId, position, tabId }))
     }
     case 'SPLIT_WITH_TAB': {
-      const { tabId, fromGroupId, toGroupId, direction } = action.payload
-      return applyLayoutResult(state, execute(state, { type: 'SPLIT_WITH_TAB', tabId, fromGroupId, toGroupId, direction }))
+      const { tabId, fromGroupId, toGroupId, position } = action.payload
+      return applyLayoutResult(state, execute(state, { type: 'SPLIT_WITH_TAB', tabId, fromGroupId, toGroupId, position }))
     }
     case 'MOVE_TAB': {
       const { tabId, fromGroupId, toGroupId, toIndex } = action.payload

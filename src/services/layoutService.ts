@@ -1,4 +1,4 @@
-import type { AppState, LayoutNode, OpenFile, TabEntry, SplitNode } from '../types'
+import type { AppState, LayoutNode, OpenFile, TabEntry, SplitNode, SplitPosition } from '../types'
 import { isEditorGroup, isSplitNode } from '../types'
 import {
   findGroup,
@@ -18,13 +18,11 @@ import {
 
 // ---- Operation Types ----
 
-type Direction = 'horizontal' | 'vertical'
-
 export type LayoutOperation =
   | { type: 'OPEN_FILE'; file: OpenFile; tabId: string; groupId?: string }
-  | { type: 'OPEN_AND_SPLIT'; file: OpenFile; tabId: string; groupId: string; direction: Direction; newGroupFirst?: boolean }
-  | { type: 'SPLIT_GROUP'; groupId: string; direction: Direction; tabId?: string; newGroupFirst?: boolean }
-  | { type: 'SPLIT_WITH_TAB'; tabId: string; fromGroupId: string; toGroupId: string; direction: Direction; newGroupFirst?: boolean }
+  | { type: 'OPEN_AND_SPLIT'; file: OpenFile; tabId: string; groupId: string; position: SplitPosition }
+  | { type: 'SPLIT_GROUP'; groupId: string; position: SplitPosition; tabId?: string }
+  | { type: 'SPLIT_WITH_TAB'; tabId: string; fromGroupId: string; toGroupId: string; position: SplitPosition }
   | { type: 'MOVE_TAB'; tabId: string; fromGroupId: string; toGroupId: string; toIndex: number }
   | { type: 'CLOSE_TAB'; groupId: string; tabId: string }
   | { type: 'CLOSE_GROUP'; groupId: string }
@@ -194,12 +192,12 @@ function handleOpenAndSplit(
   state: AppState,
   op: LayoutOperation & { type: 'OPEN_AND_SPLIT' }
 ): LayoutResult {
-  const { file, tabId, groupId, direction, newGroupFirst } = op
+  const { file, tabId, groupId, position } = op
   const tab: TabEntry = {
     id: tabId, fileId: file.fileId, filePath: file.filePath,
     fileName: file.fileName, viewMode: 'preview',
   }
-  const newLayout = splitWithFile(state.layoutRoot!, groupId, tab, direction, newGroupFirst)
+  const newLayout = splitWithFile(state.layoutRoot!, groupId, tab, position)
   const newGroup = findGroupContainingTab(newLayout, tabId)
 
   return {
@@ -217,9 +215,9 @@ function handleSplitGroup(
   state: AppState,
   op: LayoutOperation & { type: 'SPLIT_GROUP' }
 ): LayoutResult {
-  const { groupId, direction, tabId, newGroupFirst } = op
+  const { groupId, position, tabId } = op
   const layout = state.layoutRoot!
-  const newLayout = splitGroup(layout, groupId, direction, tabId, newGroupFirst)
+  const newLayout = splitGroup(layout, groupId, position, tabId)
 
   const sourceGroup = findGroup(layout, groupId)
   const tabToFind = tabId || sourceGroup?.tabs[sourceGroup?.activeTabIndex ?? 0]?.id
@@ -240,8 +238,8 @@ function handleSplitWithTab(
   state: AppState,
   op: LayoutOperation & { type: 'SPLIT_WITH_TAB' }
 ): LayoutResult {
-  const { tabId, fromGroupId, toGroupId, direction, newGroupFirst } = op
-  const newLayout = splitWithTab(state.layoutRoot!, tabId, fromGroupId, toGroupId, direction, newGroupFirst)
+  const { tabId, fromGroupId, toGroupId, position } = op
+  const newLayout = splitWithTab(state.layoutRoot!, tabId, fromGroupId, toGroupId, position)
   const newGroup = findGroupContainingTab(newLayout, tabId)
 
   return {

@@ -74,7 +74,7 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
           <div
             className="px-4 py-1 hover:bg-blue-500 hover:text-white cursor-pointer"
             onClick={() => {
-              dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, direction: 'horizontal' } })
+              dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, position: 'right' } })
               setContextMenu(null)
             }}
           >
@@ -83,7 +83,7 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
           <div
             className="px-4 py-1 hover:bg-blue-500 hover:text-white cursor-pointer"
             onClick={() => {
-              dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, direction: 'vertical' } })
+              dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, position: 'bottom' } })
               setContextMenu(null)
             }}
           >

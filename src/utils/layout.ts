@@ -1,5 +1,12 @@
-import type { LayoutNode, EditorGroup, SplitNode, TabEntry } from '../types'
+import type { LayoutNode, EditorGroup, SplitNode, SplitPosition, TabEntry } from '../types'
 import { isEditorGroup } from '../types'
+
+function posDir(p: SplitPosition): 'horizontal' | 'vertical' {
+  return p === 'top' || p === 'bottom' ? 'vertical' : 'horizontal'
+}
+function posNewFirst(p: SplitPosition): boolean {
+  return p === 'left' || p === 'top'
+}
 
 let idCounter = 0
 
@@ -70,10 +77,11 @@ export function getActiveTab(group: EditorGroup): TabEntry | null {
 export function splitGroup(
   root: LayoutNode,
   groupId: string,
-  direction: 'horizontal' | 'vertical',
-  tabId?: string,
-  newGroupFirst?: boolean
+  position: SplitPosition,
+  tabId?: string
 ): LayoutNode {
+  const direction = posDir(position)
+  const newGroupFirst = posNewFirst(position)
   return transformNode(root, groupId, (group) => {
     const newGroup = createEditorGroup()
 
@@ -118,9 +126,10 @@ export function splitWithTab(
   tabId: string,
   fromGroupId: string,
   toGroupId: string,
-  direction: 'horizontal' | 'vertical',
-  newGroupFirst?: boolean
+  position: SplitPosition
 ): LayoutNode {
+  const direction = posDir(position)
+  const newGroupFirst = posNewFirst(position)
   let tabToMove: TabEntry | null = null
 
   // Step 1: Remove tab from source group
@@ -194,9 +203,10 @@ export function splitWithFile(
   root: LayoutNode,
   targetGroupId: string,
   tab: TabEntry,
-  direction: 'horizontal' | 'vertical',
-  newGroupFirst?: boolean
+  position: SplitPosition
 ): LayoutNode {
+  const direction = posDir(position)
+  const newGroupFirst = posNewFirst(position)
   return transformNode(root, targetGroupId, (group) => {
     const newGroup = createEditorGroup()
 

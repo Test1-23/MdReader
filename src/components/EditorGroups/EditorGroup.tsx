@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppContext } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
 import { readDroppedFile, generateTabId } from '../../utils/fileReader'
 import { getFileName, generateFileId, extractHeadings } from '../../utils/markdown'
-import type { EditorGroup as EditorGroupType } from '../../types'
+import type { EditorGroup as EditorGroupType, SplitPosition } from '../../types'
 import { GroupTabs } from './GroupTabs'
 import { GroupContent } from './GroupContent'
 
-type DropZone = 'top' | 'bottom' | 'left' | 'right' | 'center' | null
-type EdgeZone = 'top' | 'bottom' | 'left' | 'right'
+type DropZone = SplitPosition | 'center' | null
 
 const TAB_BAR_HEIGHT = 36
 const EDGE_PCT = 20
@@ -18,21 +17,25 @@ function computeZone(e: React.DragEvent<HTMLDivElement>): DropZone {
   const contentTop = rect.top + TAB_BAR_HEIGHT
   const contentHeight = rect.height - TAB_BAR_HEIGHT
 
-  // Tab bar area — no edge detection (prevents double-fire with tab interactions)
+  // Tab bar area — no edge detection
   if (e.clientY < contentTop) return 'center'
 
   const xPct = ((e.clientX - rect.left) / rect.width) * 100
   const yPct = ((e.clientY - contentTop) / contentHeight) * 100
 
-  if (xPct < EDGE_PCT) return 'left'
-  if (xPct > 100 - EDGE_PCT) return 'right'
-  if (yPct < EDGE_PCT) return 'top'
-  if (yPct > 100 - EDGE_PCT) return 'bottom'
-  return 'center'
-}
+  const distToLeft = xPct
+  const distToRight = 100 - xPct
+  const distToTop = yPct
+  const distToBottom = 100 - yPct
 
-function zoneToDirection(zone: EdgeZone): 'horizontal' | 'vertical' {
-  return zone === 'left' || zone === 'right' ? 'horizontal' : 'vertical'
+  const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom)
+  if (minDist > EDGE_PCT) return 'center'
+
+  // Closest edge wins — no priority shadowing
+  if (minDist === distToLeft) return 'left'
+  if (minDist === distToRight) return 'right'
+  if (minDist === distToTop) return 'top'
+  return 'bottom'
 }
 
 interface EditorGroupProps {
@@ -45,12 +48,19 @@ export function EditorGroup({ group }: EditorGroupProps) {
   const isActive = state.activeGroupId === group.id
 
   const [dropZone, setDropZone] = useState<DropZone>(null)
+  const leaveTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
-  // Clear highlight when drag ends (cancelled without drop)
+  // Clear highlight when drag ends
   useEffect(() => {
-    const clear = () => setDropZone(null)
+    const clear = () => {
+      if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current)
+      setDropZone(null)
+    }
     window.addEventListener('dragend', clear)
-    return () => window.removeEventListener('dragend', clear)
+    return () => {
+      window.removeEventListener('dragend', clear)
+      if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current)
+    }
   }, [])
 
   const handleFocus = useCallback(() => {
@@ -68,15 +78,17 @@ export function EditorGroup({ group }: EditorGroupProps) {
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current)
+      leaveTimerRef.current = undefined
+    }
     setDropZone(computeZone(e))
   }, [])
 
-  // Don't clear drop zone on leave — rely on dragover from parent/sibling to update.
-  // The zone is cleared in handleDrop and on the next dragOver in a different group.
-  // This prevents the highlight from disappearing when the mouse is at the very edge
-  // of the element (especially left/top window boundaries).
-  const handleDragLeave = useCallback((_e: React.DragEvent<HTMLDivElement>) => {
-    // Intentionally no-op — zone persists until drop or next dragover
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      leaveTimerRef.current = setTimeout(() => setDropZone(null), 150)
+    }
   }, [])
 
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
@@ -88,6 +100,10 @@ export function EditorGroup({ group }: EditorGroupProps) {
 
     // Hide global drag overlay
     dispatch({ type: 'SET_DRAG_OVER', payload: false })
+
+    // Edge zone → use as split position directly
+    const position: SplitPosition | null =
+      zone === 'center' || zone === null ? null : zone
 
     // --- Case 1: External file drop (files in dataTransfer) ---
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
@@ -101,13 +117,12 @@ export function EditorGroup({ group }: EditorGroupProps) {
         const openFile = await readDroppedFile(file, readFile, isElectron)
         if (!openFile) return
 
-        if (zone === 'center') {
+        if (!position) {
           dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
         } else {
-          const direction = zoneToDirection(zone as EdgeZone)
           dispatch({
             type: 'OPEN_FILE_AND_SPLIT',
-            payload: { file: openFile, tabId: generateTabId(), groupId: group.id, direction, newGroupFirst: zone === 'left' || zone === 'top' },
+            payload: { file: openFile, tabId: generateTabId(), groupId: group.id, position },
           })
         }
       } catch {
@@ -131,13 +146,12 @@ export function EditorGroup({ group }: EditorGroupProps) {
         }
         const tabId = generateTabId()
 
-        if (zone === 'center') {
+        if (!position) {
           dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId, groupId: group.id } })
         } else {
-          const direction = zoneToDirection(zone as EdgeZone)
           dispatch({
             type: 'OPEN_FILE_AND_SPLIT',
-            payload: { file: openFile, tabId, groupId: group.id, direction, newGroupFirst: zone === 'left' || zone === 'top' },
+            payload: { file: openFile, tabId, groupId: group.id, position },
           })
         }
       } catch {
@@ -146,22 +160,19 @@ export function EditorGroup({ group }: EditorGroupProps) {
       return
     }
 
-    // --- Case 3: Tab drag (tab-id + from-group-id) — EditorGroup handles all tab drops ---
+    // --- Case 3: Tab drag (tab-id + from-group-id) ---
     const tabId = e.dataTransfer.getData('text/tab-id')
     const fromGroupId = e.dataTransfer.getData('text/from-group-id')
     if (tabId && fromGroupId) {
-      if (zone === 'center') {
-        // Center zone → normal tab move (replaces GroupTabs' old drop handler)
+      if (!position) {
         dispatch({
           type: 'MOVE_TAB',
           payload: { tabId, fromGroupId, toGroupId: group.id, toIndex: group.tabs.length },
         })
       } else {
-        // Edge zone → split with this tab
-        const direction = zoneToDirection(zone as EdgeZone)
         dispatch({
           type: 'SPLIT_WITH_TAB',
-          payload: { tabId, fromGroupId, toGroupId: group.id, direction, newGroupFirst: zone === 'left' || zone === 'top' },
+          payload: { tabId, fromGroupId, toGroupId: group.id, position },
         })
       }
     }
@@ -177,7 +188,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Tab Bar with group close button */}
+      {/* Tab Bar */}
       <div className="flex items-stretch" style={{ height: TAB_BAR_HEIGHT }}>
         <div className="flex-1 min-w-0">
           <GroupTabs group={group} isActive={isActive} />
