@@ -123,8 +123,7 @@ export function ChatTreeView({ conv, activeNodeId, onSelectNode }: ChatTreeViewP
               key={i}
               d={edgePath(edge.from, edge.to)}
               stroke={edge.isActive ? '#3b82f6' : '#9ca3af'}
-              strokeWidth={edge.isActive ? 2 : 1}
-              strokeDasharray={edge.isActive ? undefined : '4 3'}
+              strokeWidth={edge.isActive ? 2.5 : 1.5}
               fill="none"
             />
           ))}

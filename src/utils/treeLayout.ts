@@ -42,8 +42,12 @@ export interface TreeLayout {
 // ---- Layout Computation ----
 
 /**
- * Git-graph style layout: DFS assigns rows; first child inherits parent column,
- * other children branch one column to the right. Collapsed nodes skip children.
+ * Git-graph style layout (parallel branches):
+ * - Main chain: first child goes DOWN one row, same column
+ * - Branches: other children are placed on the SAME ROW as parent, one column right
+ *   (parallel with the main chain, like Git Graph)
+ * - Branch's own chain continues down from the branch row
+ * - Collapsed nodes skip children
  */
 export function computeTreeLayout(
   conv: Conversation,
@@ -60,12 +64,19 @@ export function computeTreeLayout(
 
   const result: TreeLayoutNode[] = []
   const edges: TreeEdge[] = []
-  let row = 0
+  const occupied = new Set<string>() // `${column}:${row}` — prevent overlaps
+  let maxRow = 0
 
-  const walk = (userNode: ChatNode, column: number, isFirstChild: boolean): TreeLayoutNode => {
+  const walk = (userNode: ChatNode, column: number, rowHint: number): TreeLayoutNode => {
     const collapsed = collapsedIds.has(userNode.id)
     const children = getUserChildren(conv, userNode.id)
     const assistant = getAssistantReply(conv, userNode.id)
+
+    // If this column/row is occupied, push down until free
+    let row = rowHint
+    while (occupied.has(`${column}:${row}`)) row++
+    occupied.add(`${column}:${row}`)
+    maxRow = Math.max(maxRow, row)
 
     const layoutNode: TreeLayoutNode = {
       id: userNode.id,
@@ -80,12 +91,14 @@ export function computeTreeLayout(
       children: [],
     }
     result.push(layoutNode)
-    row++
 
     if (!collapsed) {
       children.forEach((child, i) => {
+        // First child: main chain — down one row, same column
+        // Other children: branches — same row as parent, one column right (parallel)
         const childColumn = i === 0 ? column : column + 1
-        const childNode = walk(child, childColumn, i === 0)
+        const childRow = i === 0 ? row + 1 : row
+        const childNode = walk(child, childColumn, childRow)
         layoutNode.children.push(childNode)
         edges.push({
           from: layoutNode,
@@ -98,8 +111,8 @@ export function computeTreeLayout(
     return layoutNode
   }
 
-  rootNodes.forEach((root, i) => {
-    walk(root, 0, i === 0)
+  rootNodes.forEach((root) => {
+    walk(root, 0, 0)
   })
 
   const maxColumn = result.reduce((max, n) => Math.max(max, n.column), 0)
@@ -107,9 +120,9 @@ export function computeTreeLayout(
   return {
     nodes: result,
     edges,
-    totalRows: row,
+    totalRows: maxRow + 1,
     maxColumn,
     width: MARGIN_X + maxColumn * COL_WIDTH + COL_WIDTH,
-    height: MARGIN_Y + row * ROW_HEIGHT + ROW_HEIGHT,
+    height: MARGIN_Y + (maxRow + 1) * ROW_HEIGHT + ROW_HEIGHT,
   }
 }

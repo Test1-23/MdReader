@@ -161,12 +161,25 @@ export function getAssistantReply(conv: Conversation, userNodeId: string): ChatN
 }
 
 // 获取 user 节点的 user 子节点（下一层分支起点）
+// 展平：直接子 user 节点 + assistant 子节点下的 user 子节点
 export function getUserChildren(conv: Conversation, userNodeId: string): ChatNode[] {
   const node = conv.nodes[userNodeId]
   if (!node) return []
-  return node.childrenIds
-    .map((id) => conv.nodes[id])
-    .filter((c): c is ChatNode => !!c && c.role === 'user')
+  const result: ChatNode[] = []
+  for (const childId of node.childrenIds) {
+    const child = conv.nodes[childId]
+    if (!child) continue
+    if (child.role === 'user') {
+      result.push(child)
+    } else if (child.role === 'assistant') {
+      // 新消息可能挂在 assistant 回复下（回溯到 AI 回复后发送）
+      for (const gchildId of child.childrenIds) {
+        const gchild = conv.nodes[gchildId]
+        if (gchild && gchild.role === 'user') result.push(gchild)
+      }
+    }
+  }
+  return result
 }
 
 // ---- Build Messages for API ----

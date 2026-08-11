@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useAppContext } from '../../context/AppContext'
-import { createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages } from '../../utils/conversationTree'
+import { createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages, getAssistantReply } from '../../utils/conversationTree'
 import type { Conversation } from '../../utils/conversationTree'
 import { ChatView } from './ChatView'
 import { ChatTreeView } from './ChatTreeView'
@@ -73,9 +73,12 @@ export function AIChatPanel() {
     setConv((prev) => switchBranch(prev, nodeId))
   }, [])
 
-  // 树形图点击节点 → 切换到该分支并回到聊天视图
+  // 树形图点击节点 → 回溯到该对的 AI 回复节点（若无回复则回到 user 节点），并切回聊天视图
   const handleSelectTreeNode = useCallback((nodeId: string) => {
-    setConv((prev) => switchBranch(prev, nodeId))
+    setConv((prev) => {
+      const reply = getAssistantReply(prev, nodeId)
+      return switchBranch(prev, reply ? reply.id : nodeId)
+    })
     setViewMode('chat')
   }, [])
 
