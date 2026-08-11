@@ -45,29 +45,28 @@ export function useDragDrop() {
       const files = e.dataTransfer?.files
       if (!files || files.length === 0) return
 
-      const file = Array.from(files).find((f) => {
+      const mdFiles = Array.from(files).filter((f) => {
         const name = f.name.toLowerCase()
         return name.endsWith('.md') || name.endsWith('.markdown') || name.endsWith('.mdown') || name.endsWith('.mkd') || name.endsWith('.txt')
       })
 
-      if (!file) {
+      if (mdFiles.length === 0) {
         dispatch({ type: 'SET_ERROR', payload: 'No markdown file found in the dropped items.' })
         return
       }
 
-      try {
-        const openFile = await readDroppedFile(file, readFile, isElectron)
-        if (!openFile) {
-          dispatch({ type: 'SET_ERROR', payload: 'No markdown file found in the dropped items.' })
-          return
+      for (const file of mdFiles) {
+        try {
+          const openFile = await readDroppedFile(file, readFile, isElectron)
+          if (openFile) {
+            dispatch({
+              type: 'OPEN_FILE',
+              payload: { ...openFile, tabId: generateTabId() },
+            })
+          }
+        } catch {
+          dispatch({ type: 'SET_ERROR', payload: 'Failed to read one of the dropped files.' })
         }
-
-        dispatch({
-          type: 'OPEN_FILE',
-          payload: { ...openFile, tabId: generateTabId() },
-        })
-      } catch (err) {
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to read the dropped file.' })
       }
     }
 

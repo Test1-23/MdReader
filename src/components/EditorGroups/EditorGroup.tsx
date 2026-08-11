@@ -107,14 +107,28 @@ export function EditorGroup({ group }: EditorGroupProps) {
 
     // --- Case 1: External file drop (files in dataTransfer) ---
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = Array.from(e.dataTransfer.files).find((f) => {
+      const mdFiles = Array.from(e.dataTransfer.files).filter((f) => {
         const n = f.name.toLowerCase()
         return n.endsWith('.md') || n.endsWith('.markdown') || n.endsWith('.mdown') || n.endsWith('.mkd') || n.endsWith('.txt')
       })
-      if (!file) return
+      if (mdFiles.length === 0) return
 
+      // Multi-file → open all in this group, no split regardless of zone
+      if (mdFiles.length > 1) {
+        for (const file of mdFiles) {
+          try {
+            const openFile = await readDroppedFile(file, readFile, isElectron)
+            if (openFile) {
+              dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
+            }
+          } catch { /* skip failed files */ }
+        }
+        return
+      }
+
+      // Single file → existing behavior
       try {
-        const openFile = await readDroppedFile(file, readFile, isElectron)
+        const openFile = await readDroppedFile(mdFiles[0], readFile, isElectron)
         if (!openFile) return
 
         if (!position) {
