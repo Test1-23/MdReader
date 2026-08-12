@@ -430,6 +430,19 @@ export function findGroupContainingTab(root: LayoutNode, tabId: string): EditorG
   return null
 }
 
+export function findGroupContainingFileId(root: LayoutNode, fileId: string): EditorGroup | null {
+  if (isEditorGroup(root)) {
+    return root.tabs.some((t) => t.fileId === fileId) ? root : null
+  }
+
+  const split = root as SplitNode
+  for (const child of split.children) {
+    const found = findGroupContainingFileId(child, fileId)
+    if (found) return found
+  }
+  return null
+}
+
 export function findParentSplit(root: LayoutNode, childId: string): SplitNode | null {
   if (isEditorGroup(root)) return null
 

@@ -1,11 +1,13 @@
-import type { LayoutState, LayoutNode, OpenFile, TabEntry, SplitNode, SplitPosition } from '../types'
+import type { LayoutState, LayoutNode, EditorGroup, OpenFile, TabEntry, SplitNode, SplitPosition } from '../types'
 import { isEditorGroup, isSplitNode } from '../types'
 import {
   findGroup,
   findGroupContainingTab,
+  findGroupContainingFileId,
   getFirstGroup,
   getActiveTab,
   createDefaultLayout,
+  createEditorGroup,
   addTabToGroup,
   removeTabFromGroup,
   transformNode,
@@ -15,10 +17,12 @@ import {
   moveTab,
   promoteSibling,
 } from '../utils/layout'
+import { AI_WINDOW_ID } from '../utils/windowDescriptor'
 
 // ---- Operation Types ----
 
 export type LayoutOperation =
+  | { type: 'OPEN_AI_WINDOW' }
   | { type: 'OPEN_FILE'; file: OpenFile; tabId: string; groupId?: string }
   | { type: 'OPEN_AND_SPLIT'; file: OpenFile; tabId: string; groupId: string; position: SplitPosition }
   | { type: 'SPLIT_GROUP'; groupId: string; position: SplitPosition; tabId?: string }
@@ -74,8 +78,9 @@ function rebuild(state: LayoutState): LayoutResult {
 function validate(_state: LayoutState, op: LayoutOperation): string | null {
   const root = _state.layoutRoot
 
-  if (op.type === 'OPEN_FILE') {
-    if (op.groupId && root && !findGroup(root, op.groupId)) {
+  // OPEN_FILE / OPEN_AI_WINDOW 允许空树（自行创建默认布局）
+  if (op.type === 'OPEN_FILE' || op.type === 'OPEN_AI_WINDOW') {
+    if (op.type === 'OPEN_FILE' && op.groupId && root && !findGroup(root, op.groupId)) {
       return `Group not found: ${op.groupId}`
     }
     return null
@@ -137,6 +142,7 @@ export function execute(
 
 function apply(state: LayoutState, op: LayoutOperation): LayoutResult {
   switch (op.type) {
+    case 'OPEN_AI_WINDOW':    return handleOpenAiWindow(state)
     case 'OPEN_FILE':         return handleOpenFile(state, op)
     case 'OPEN_AND_SPLIT':    return handleOpenAndSplit(state, op)
     case 'SPLIT_GROUP':       return handleSplitGroup(state, op)
@@ -144,6 +150,80 @@ function apply(state: LayoutState, op: LayoutOperation): LayoutResult {
     case 'MOVE_TAB':          return handleMoveTab(state, op)
     case 'CLOSE_TAB':         return handleCloseTab(state, op)
     case 'CLOSE_GROUP':       return handleCloseGroup(state, op)
+  }
+}
+
+// ---- OPEN_AI_WINDOW ----
+
+// 在最外层布局的最右侧创建分屏；新 split 用新 id 使 Allotment 重挂载、defaultSizes 生效
+function splitRightOfRoot(root: LayoutNode, tab: TabEntry): LayoutNode {
+  const newPane: EditorGroup = { ...createEditorGroup(), tabs: [tab], activeTabIndex: 0 }
+  if (isSplitNode(root) && root.direction === 'horizontal') {
+    return {
+      ...root,
+      id: `split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      children: [...root.children, newPane],
+      sizes: [...root.sizes.map((s) => Math.round(s * 0.7)), 30],
+    }
+  }
+  return {
+    type: 'split',
+    id: `split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    direction: 'horizontal',
+    children: [root, newPane],
+    sizes: [70, 30],
+  }
+}
+
+function handleOpenAiWindow(state: LayoutState): LayoutResult {
+  // 1. 已存在（按 AI_WINDOW_ID 全树查找）→ 激活
+  const existingGroup = state.layoutRoot
+    ? findGroupContainingFileId(state.layoutRoot, AI_WINDOW_ID)
+    : null
+  if (existingGroup) {
+    const existingTab = existingGroup.tabs.find((t) => t.fileId === AI_WINDOW_ID)
+    if (existingTab) {
+      return {
+        layoutRoot: state.layoutRoot,
+        activeGroupId: existingGroup.id,
+        activeTabId: existingTab.id,
+        openFilesToAdd: {},
+        openFilesToRemove: [],
+      }
+    }
+  }
+
+  const tab: TabEntry = {
+    id: `tab-ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    fileId: AI_WINDOW_ID,
+    filePath: 'ai://chat',
+    fileName: 'AI Chat',
+    viewMode: 'preview',
+  }
+
+  // 2. 无布局 → 默认布局
+  if (!state.layoutRoot) {
+    const layout = createDefaultLayout()
+    const group = getFirstGroup(layout)!
+    const updated = addTabToGroup(group, tab)
+    return {
+      layoutRoot: transformNode(layout, group.id, () => updated),
+      activeGroupId: group.id,
+      activeTabId: tab.id,
+      openFilesToAdd: {},
+      openFilesToRemove: [],
+    }
+  }
+
+  // 3. 最右侧分屏
+  const newLayout = splitRightOfRoot(state.layoutRoot, tab)
+  const newGroup = findGroupContainingTab(newLayout, tab.id)
+  return {
+    layoutRoot: newLayout,
+    activeGroupId: newGroup?.id ?? null,
+    activeTabId: tab.id,
+    openFilesToAdd: {},
+    openFilesToRemove: [],
   }
 }
 

@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import type { TabEntry } from '../../types'
+import { AI_WINDOW_ID } from '../../utils/windowDescriptor'
 
 interface GroupTabProps {
   tab: TabEntry
@@ -39,7 +40,7 @@ export function GroupTab({ tab, groupId, isActive, onClick, onClose, onContextMe
     >
       {/* File icon */}
       <span className="text-sm flex-shrink-0">
-        {tab.viewMode === 'preview' ? '📝' : '📋'}
+        {tab.fileId === AI_WINDOW_ID ? '💬' : (tab.viewMode === 'preview' ? '📝' : '📋')}
       </span>
 
       {/* File name */}

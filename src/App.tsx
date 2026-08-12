@@ -9,7 +9,6 @@ import { MainArea } from './components/MainArea'
 import { EmptyState } from './components/EmptyState'
 import { ErrorBanner } from './components/ErrorBanner'
 import { DragDropOverlay } from './components/DragDropOverlay'
-import { AIChatPanel } from './components/AIChat/AIChatPanel'
 
 function AppContent() {
   const { state: layoutState } = useLayoutContext()
@@ -32,15 +31,7 @@ function AppContent() {
         <ActivityBar />
         {state.sidebarVisible && <Sidebar />}
         {hasOpenFiles ? <MainArea /> : <EmptyState />}
-        {state.showChatPanel && state.chatPosition !== 'bottom' && <AIChatPanel />}
       </AppShell>
-
-      {/* Bottom-positioned chat panel */}
-      {state.showChatPanel && state.chatPosition === 'bottom' && (
-        <div className="absolute bottom-0 left-0 right-0 h-60 z-20 flex">
-          <AIChatPanel />
-        </div>
-      )}
 
       {/* Overlays */}
       {state.isDragOver && <DragDropOverlay />}

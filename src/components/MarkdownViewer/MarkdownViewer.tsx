@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { useUIContext } from '../../context/AppContext'
+import { useLayoutContext, useUIContext } from '../../context/AppContext'
 
 interface MarkdownViewerProps {
   content: string
@@ -131,15 +131,18 @@ const COMPONENTS = {
 }
 
 export function MarkdownViewer({ content }: MarkdownViewerProps) {
-  const { dispatch } = useUIContext()
+  const { dispatch: layoutDispatch } = useLayoutContext()
+  const { dispatch: uiDispatch } = useUIContext()
 
   const handleMouseUp = useCallback(() => {
     const selection = window.getSelection()
     const text = selection?.toString()?.trim()
     if (text && text.length > 0) {
-      dispatch({ type: 'SET_SELECTION', payload: { text } })
+      // 呼出 AI 窗口（复用统一窗口逻辑：已存在则聚焦，否则最右侧分屏）
+      layoutDispatch({ type: 'OPEN_AI_WINDOW' })
+      uiDispatch({ type: 'SET_SELECTION', payload: { text } })
     }
-  }, [dispatch])
+  }, [layoutDispatch, uiDispatch])
 
   return (
     <div

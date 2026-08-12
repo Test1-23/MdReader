@@ -1,92 +1,32 @@
-import { useState, useCallback, useRef } from 'react'
-import { useUIContext } from '../../context/AppContext'
+import { useState, useCallback } from 'react'
+import { useLayoutContext, useUIContext } from '../../context/AppContext'
 import {
   createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages,
   getAssistantReply, replaceNodeContent, replaceAssistantReply,
 } from '../../utils/conversationTree'
-import type { Conversation } from '../../utils/conversationTree'
+import { findGroupContainingTab } from '../../utils/layout'
 import { ChatView } from './ChatView'
 import { ChatTreeView } from './ChatTreeView'
 import { ChatInput } from './ChatInput'
 
 type ChatViewMode = 'chat' | 'tree'
 
-const MIN_WIDTH = 240
-const MIN_HEIGHT = 160
-
-function loadSavedSize(): number {
-  const saved = parseInt(localStorage.getItem('mdreader-chat-width') || '', 10)
-  return saved >= MIN_WIDTH ? saved : 320
+interface AIChatPanelProps {
+  tabId: string // 本窗口在布局树中的 tab id（用于关闭）
 }
 
-const positionClasses: Record<string, string> = {
-  right: 'border-l border-gray-300 dark:border-gray-700',
-  left: 'border-r border-gray-300 dark:border-gray-700',
-  bottom: 'border-t border-gray-300 dark:border-gray-700 w-full',
-}
-
-export function AIChatPanel() {
-  const { state, dispatch } = useUIContext()
-  const [conv, setConv] = useState<Conversation>(() => createConversation())
+export function AIChatPanel({ tabId }: AIChatPanelProps) {
+  const { state: uiState, dispatch: uiDispatch } = useUIContext()
+  const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
   const [loading, setLoading] = useState(false)
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
-  const [width, setWidth] = useState(loadSavedSize)
-  const [height, setHeight] = useState(240)
-  const [dragging, setDragging] = useState(false)
-  const dragRef = useRef<{ start: number; startSize: number; axis: 'x' | 'y'; lastSize: number } | null>(null)
-  const rafRef = useRef<number>()
 
-  const selectedText = state.selectedText
-  const position = state.chatPosition
+  const selectedText = uiState.selectedText
+  const conv = uiState.aiConversation ?? createConversation()
 
-  // ---- VS Code 风格拖拽调节尺寸 ----
-  const startResize = useCallback((e: React.MouseEvent, axis: 'x' | 'y') => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragging(true)
-    const startSize = axis === 'x' ? width : height
-    dragRef.current = {
-      start: axis === 'x' ? e.clientX : e.clientY,
-      startSize, // 固定基准：拖动期间不再变化
-      axis,
-      lastSize: startSize,
-    }
-    const onMove = (ev: MouseEvent) => {
-      const d = dragRef.current
-      if (!d) return
-      // 向面板外侧拖 = 面板变大：
-      // - left/right 面板 handle 在面板内缘，向左拖（clientX 减小）应变宽
-      // - bottom 面板 handle 在上缘，向上拖（clientY 减小）应变高
-      const delta = d.axis === 'x' ? -(ev.clientX - d.start) : -(ev.clientY - d.start)
-      // 单一基准：size = 初始尺寸 + 绝对差值（1:1 拖动，不重复累加）
-      const size = d.axis === 'x'
-        ? Math.max(MIN_WIDTH, d.startSize + delta)
-        : Math.max(MIN_HEIGHT, d.startSize + delta)
-      d.lastSize = size
-      // rAF 节流：每帧最多一次 setState（拖动时不再每 mousemove 全量重渲染）
-      if (rafRef.current === undefined) {
-        rafRef.current = requestAnimationFrame(() => {
-          rafRef.current = undefined
-          if (d.axis === 'x') setWidth(d.lastSize)
-          else setHeight(d.lastSize)
-        })
-      }
-    }
-    const onUp = () => {
-      const final = dragRef.current?.lastSize
-      dragRef.current = null
-      setDragging(false)
-      if (rafRef.current !== undefined) {
-        cancelAnimationFrame(rafRef.current)
-        rafRef.current = undefined
-      }
-      if (final !== undefined) localStorage.setItem('mdreader-chat-width', String(final))
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [width, height, position])
+  const setConv = useCallback((next: typeof conv) => {
+    uiDispatch({ type: 'SET_AI_CONVERSATION', payload: next })
+  }, [uiDispatch])
 
   const handleSend = useCallback(async (message: string) => {
     setLoading(true)
@@ -96,7 +36,7 @@ export function AIChatPanel() {
     setConv(updated)
 
     // Missing API config → show a helpful message instead of silently failing
-    if (!state.apiEndpoint || !state.apiKey || !state.apiModel) {
+    if (!uiState.apiEndpoint || !uiState.apiKey || !uiState.apiModel) {
       const hint = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
       setConv(addAssistantNode(updated, hint))
       setLoading(false)
@@ -107,9 +47,9 @@ export function AIChatPanel() {
       const messages = buildMessages(updated, updated.activeNodeId!, message, selectedText || undefined)
 
       const config = {
-        endpoint: state.apiEndpoint,
-        apiKey: state.apiKey,
-        model: state.apiModel,
+        endpoint: uiState.apiEndpoint,
+        apiKey: uiState.apiKey,
+        model: uiState.apiModel,
       }
 
       let reply: string
@@ -132,22 +72,19 @@ export function AIChatPanel() {
     } finally {
       setLoading(false)
     }
-  }, [conv, selectedText, state.apiEndpoint, state.apiKey, state.apiModel])
+  }, [conv, selectedText, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel, setConv])
 
   const handleSwitchBranch = useCallback((nodeId: string) => {
-    setConv((prev) => switchBranch(prev, nodeId))
-  }, [])
+    setConv(switchBranch(conv, nodeId))
+  }, [conv, setConv])
 
   // 树形图点击节点 → 回溯到该对的 AI 回复节点（若无回复则回到 user 节点），并切回聊天视图
   const handleSelectTreeNode = useCallback((nodeId: string) => {
-    setConv((prev) => {
-      const reply = getAssistantReply(prev, nodeId)
-      return switchBranch(prev, reply ? reply.id : nodeId)
-    })
+    const reply = getAssistantReply(conv, nodeId)
+    setConv(switchBranch(conv, reply ? reply.id : nodeId))
     setViewMode('chat')
-  }, [])
+  }, [conv, setConv])
 
-  // ---- 复制 ----
   const handleCopy = useCallback(async (nodeId: string) => {
     const node = conv.nodes[nodeId]
     if (!node) return
@@ -159,14 +96,14 @@ export function AIChatPanel() {
   }, [conv])
 
   // ---- 通用：为该 user 节点请求 AI 并覆盖/添加回复 ----
-  const requestAiForUserNode = useCallback(async (currentConv: Conversation, userNodeId: string): Promise<Conversation> => {
+  const requestAiForUserNode = useCallback(async (currentConv: typeof conv, userNodeId: string): Promise<typeof conv> => {
     const userNode = currentConv.nodes[userNodeId]
     if (!userNode) return currentConv
     const messages = buildMessages(currentConv, userNodeId, userNode.content, userNode.selectedText)
 
     let reply: string
     if (window.electronAPI?.aiChat) {
-      const config = { endpoint: state.apiEndpoint, apiKey: state.apiKey, model: state.apiModel }
+      const config = { endpoint: uiState.apiEndpoint, apiKey: uiState.apiKey, model: uiState.apiModel }
       reply = await window.electronAPI.aiChat(messages as any, config)
     } else {
       reply = `[DEV MODE] AI not available. You asked: "${userNode.content.slice(0, 100)}"`
@@ -176,11 +113,10 @@ export function AIChatPanel() {
     return existingReply
       ? replaceAssistantReply(currentConv, userNodeId, reply)
       : addAssistantNode(currentConv, reply, userNodeId)
-  }, [state.apiEndpoint, state.apiKey, state.apiModel])
+  }, [uiState.apiEndpoint, uiState.apiKey, uiState.apiModel])
 
   // ---- 重发 / 重新生成 ----
   const handleRegenerate = useCallback(async (nodeId: string) => {
-    // 解析出 user 节点：assistant 节点取其父 user 节点
     const node = conv.nodes[nodeId]
     if (!node) return
     const userNodeId = node.role === 'user'
@@ -197,12 +133,11 @@ export function AIChatPanel() {
       }
     } catch (err: any) {
       const errorMsg = `Error: ${err.message || 'Unknown error'}`
-      const withError = replaceAssistantReply(conv, userNodeId, errorMsg)
-      setConv(withError)
+      setConv(replaceAssistantReply(conv, userNodeId, errorMsg))
     } finally {
       setLoading(false)
     }
-  }, [conv, requestAiForUserNode])
+  }, [conv, setConv, requestAiForUserNode])
 
   // ---- 编辑 + 重新发送 ----
   const handleEdit = useCallback(async (nodeId: string, newText: string) => {
@@ -210,7 +145,7 @@ export function AIChatPanel() {
     const updated = replaceNodeContent(conv, nodeId, newText)
     setConv(updated)
 
-    if (!state.apiEndpoint || !state.apiKey || !state.apiModel) {
+    if (!uiState.apiEndpoint || !uiState.apiKey || !uiState.apiModel) {
       const hint = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
       setConv(addAssistantNode(updated, hint, nodeId))
       setLoading(false)
@@ -229,39 +164,19 @@ export function AIChatPanel() {
     } finally {
       setLoading(false)
     }
-  }, [conv, state.apiEndpoint, state.apiKey, state.apiModel, requestAiForUserNode])
+  }, [conv, setConv, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel, requestAiForUserNode])
 
-  const isBottom = position === 'bottom'
-  const sizeStyle = isBottom
-    ? { height: `${height}px` }
-    : { width: `${width}px` }
+  // ---- 关闭窗口（回收 pane，对话保留在 context）----
+  const handleClose = useCallback(() => {
+    if (!layoutState.layoutRoot) return
+    const group = findGroupContainingTab(layoutState.layoutRoot, tabId)
+    if (group) {
+      layoutDispatch({ type: 'CLOSE_TAB', payload: { groupId: group.id, tabId } })
+    }
+  }, [layoutState.layoutRoot, tabId, layoutDispatch])
 
   return (
-    <div
-      className={`relative ${positionClasses[position]} bg-white dark:bg-gray-900 flex flex-col`}
-      style={sizeStyle}
-    >
-      {/* 拖拽调节 handle（反馈改轻：默认透明，hover 淡灰，拖动中淡蓝细线） */}
-      {isBottom ? (
-        <div
-          onMouseDown={(e) => startResize(e, 'y')}
-          className={`
-            absolute top-0 left-0 right-0 h-[3px] cursor-row-resize transition-colors
-            ${dragging ? 'bg-blue-400/60' : 'hover:bg-gray-400/40'}
-          `}
-          title="拖拽调整高度"
-        />
-      ) : (
-        <div
-          onMouseDown={(e) => startResize(e, 'x')}
-          className={`
-            absolute top-0 bottom-0 w-[3px] -translate-x-1/2 cursor-col-resize transition-colors
-            ${dragging ? 'bg-blue-400/60' : 'hover:bg-gray-400/40'}
-            ${position === 'right' ? 'left-0' : 'right-0'}
-          `}
-          title="拖拽调整宽度"
-        />
-      )}
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
         <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 flex-1">
@@ -292,40 +207,6 @@ export function AIChatPanel() {
           </button>
         </div>
 
-        {/* 位置选择器 */}
-        <div className="flex gap-0.5">
-          <button
-            onClick={() => dispatch({ type: 'SET_CHAT_POSITION', payload: 'left' })}
-            className={`
-              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${position === 'left' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}
-            `}
-            title="Left"
-          >
-            ⇠
-          </button>
-          <button
-            onClick={() => dispatch({ type: 'SET_CHAT_POSITION', payload: 'right' })}
-            className={`
-              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${position === 'right' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}
-            `}
-            title="Right"
-          >
-            ⇢
-          </button>
-          <button
-            onClick={() => dispatch({ type: 'SET_CHAT_POSITION', payload: 'bottom' })}
-            className={`
-              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${position === 'bottom' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}
-            `}
-            title="Bottom"
-          >
-            ⇣
-          </button>
-        </div>
-
         {/* 新建对话 */}
         <button
           onClick={() => setConv(createConversation())}
@@ -334,11 +215,11 @@ export function AIChatPanel() {
         >
           +
         </button>
-        {/* 关闭面板 */}
+        {/* 关闭窗口 */}
         <button
-          onClick={() => dispatch({ type: 'TOGGLE_CHAT_PANEL' })}
+          onClick={handleClose}
           className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          title="Close Panel"
+          title="Close Window"
         >
           ×
         </button>

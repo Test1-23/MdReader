@@ -67,6 +67,8 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       return { ...state, sidebarLoading: action.payload }
 
     // ---- Layout operations (delegated to layoutService) ----
+    case 'OPEN_AI_WINDOW':
+      return applyLayoutResult(state, execute(state, { type: 'OPEN_AI_WINDOW' }))
     case 'OPEN_FILE': {
       const { tabId, groupId, ...file } = action.payload
       return applyLayoutResult(state, execute(state, { type: 'OPEN_FILE', file, tabId, groupId }))
@@ -145,8 +147,7 @@ const initialUI: UIState = {
   apiKey: '',
   apiModel: '',
   selectedText: null,
-  showChatPanel: false,
-  chatPosition: (localStorage.getItem('mdreader-chat-position') as 'right' | 'left' | 'bottom') || 'right',
+  aiConversation: null,
 }
 
 function uiReducer(state: UIState, action: UIAction): UIState {
@@ -169,14 +170,10 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     case 'SET_SELECTION': {
       // 相等性 guard：相同文本不产生新 state（防止文档内每次点击全量重渲染）
       if (state.selectedText === action.payload.text) return state
-      return { ...state, selectedText: action.payload.text, showChatPanel: action.payload.text !== null }
+      return { ...state, selectedText: action.payload.text }
     }
-    case 'TOGGLE_CHAT_PANEL':
-      return { ...state, showChatPanel: !state.showChatPanel }
-    case 'SET_CHAT_POSITION': {
-      localStorage.setItem('mdreader-chat-position', action.payload)
-      return { ...state, chatPosition: action.payload }
-    }
+    case 'SET_AI_CONVERSATION':
+      return { ...state, aiConversation: action.payload }
     default:
       return state
   }
