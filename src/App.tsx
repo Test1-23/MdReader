@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { AppProvider, useLayoutContext, useUIContext } from './context/AppContext'
+import { collectAllTabs } from './utils/layout'
 import { useDragDrop } from './hooks/useDragDrop'
 import { usePasteHandler } from './hooks/usePasteHandler'
 import { AppShell } from './components/AppShell'
@@ -23,7 +24,9 @@ function AppContent() {
     document.documentElement.classList.toggle('dark', state.darkMode)
   }, [state.darkMode])
 
-  const hasOpenFiles = layoutState.layoutRoot !== null && layoutState.openFiles && Object.keys(layoutState.openFiles).length > 0
+  // 布局树中存在任何 tab（.md 或 AI 窗口）即视为有内容
+  const hasOpenFiles = layoutState.layoutRoot !== null
+    && collectAllTabs(layoutState.layoutRoot).length > 0
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden relative bg-white dark:bg-gray-900">

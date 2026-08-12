@@ -463,3 +463,8 @@ export function getFirstGroup(root: LayoutNode): EditorGroup | null {
   if (split.children.length === 0) return null
   return getFirstGroup(split.children[0])
 }
+
+export function collectAllTabs(node: LayoutNode): TabEntry[] {
+  if (isEditorGroup(node)) return [...node.tabs]
+  return (node as SplitNode).children.flatMap(collectAllTabs)
+}

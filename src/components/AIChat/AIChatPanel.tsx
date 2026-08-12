@@ -29,6 +29,13 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const selectedText = uiState.selectedText
   const conv = uiState.aiConversation ?? createConversation()
 
+  // Fix 1b: 首次挂载若无对话，创建并写回 context（保证 id 稳定，不再每次渲染生成临时对话）
+  useEffect(() => {
+    if (!uiState.aiConversation) {
+      uiDispatch({ type: 'SET_AI_CONVERSATION', payload: createConversation() })
+    }
+  }, [uiState.aiConversation, uiDispatch])
+
   const setConv = useCallback((next: typeof conv) => {
     uiDispatch({ type: 'SET_AI_CONVERSATION', payload: next })
   }, [uiDispatch])
@@ -258,7 +265,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     setConv(createConversation())
     setViewMode('chat')
     refreshList()
-  }, [conv, window.electronAPI?.saveConversation?.(conv.id, conv), setConv, refreshList])
+  }, [conv, setConv, refreshList])
 
   const handleSelectConversation = useCallback(async (id: string) => {
     if (conv.rootId && conv.id !== id) window.electronAPI?.saveConversation?.(conv.id, conv)
@@ -274,7 +281,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     }
     setViewMode('chat')
     refreshList()
-  }, [conv, window.electronAPI?.saveConversation?.(conv.id, conv), setConv, refreshList])
+  }, [conv, setConv, refreshList])
 
   const handleRenameConversation = useCallback(async (id: string, title: string) => {
     const data = await window.electronAPI?.loadConversation(id)
