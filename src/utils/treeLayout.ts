@@ -10,8 +10,8 @@ export const MARGIN_Y = 30
 export const NODE_RADIUS = 9
 
 // Tidy tree 布局常量
-const LEAF_GAP = 180 // 相邻叶子节点水平间距
-const GAP = 40 // 子树间最小间距
+const LEAF_GAP = 120 // 相邻叶子节点水平间距
+const GAP = 24 // 子树间最小间距
 
 // ---- Layout Types ----
 
