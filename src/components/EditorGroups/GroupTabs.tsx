@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useLayoutContext } from '../../context/AppContext'
 import type { EditorGroup as EditorGroupType } from '../../types'
 import { GroupTab } from './GroupTab'
+import { MENU_ITEM } from '../shared/classes'
 
 interface GroupTabsProps {
   group: EditorGroupType
@@ -72,7 +73,7 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <div
-            className="px-4 py-1 hover:bg-blue-500 hover:text-white cursor-pointer"
+            className={MENU_ITEM}
             onClick={() => {
               dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, position: 'right' } })
               setContextMenu(null)
@@ -81,7 +82,7 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
             Split Right
           </div>
           <div
-            className="px-4 py-1 hover:bg-blue-500 hover:text-white cursor-pointer"
+            className={MENU_ITEM}
             onClick={() => {
               dispatch({ type: 'SPLIT_GROUP', payload: { groupId: group.id, position: 'bottom' } })
               setContextMenu(null)
@@ -91,7 +92,7 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
           </div>
           <div className="border-t border-gray-200 my-1" />
           <div
-            className="px-4 py-1 hover:bg-blue-500 hover:text-white cursor-pointer"
+            className={MENU_ITEM}
             onClick={() => {
               handleTabClose(contextMenu.tabId)
               setContextMenu(null)

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, memo } from 'react'
 import type { ChatNode } from '../../utils/conversationTree'
+import { BTN_BASE } from '../shared/classes'
 
 interface ChatBubbleProps {
   node: ChatNode
@@ -13,8 +14,6 @@ interface ChatBubbleProps {
   onEditCancel: () => void
   editing: boolean
 }
-
-const BTN_BASE = 'px-1.5 py-0.5 text-[10px] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
 
 // memo: handlers are ref-stable (AIChatPanel), and untouched nodes keep their
 // reference — only the streaming bubble re-renders per chunk

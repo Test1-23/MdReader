@@ -1,6 +1,6 @@
 import { IpcMain, app } from 'electron'
 import { readFile, writeFile, readdir, unlink, rename } from 'fs/promises'
-import { join, resolve, isAbsolute, relative } from 'path'
+import { join, isAbsolute, relative } from 'path'
 import { randomBytes } from 'crypto'
 import type { ChatMessage, ChatRequestConfig, ConversationSummary } from '../../src/types/ipc'
 import { IPC_CHANNELS } from './channels'
@@ -87,7 +87,7 @@ export function registerAiHandlers(ipcMain: IpcMain) {
         throw new Error(`AI API error ${response.status}: ${errText.slice(0, 500)}`)
       }
 
-      const data = await response.json()
+      const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> }
       return data.choices?.[0]?.message?.content || '(empty response)'
     } finally {
       clearTimeout(timeout)

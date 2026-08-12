@@ -11,7 +11,6 @@ export const NODE_RADIUS = 9
 
 // Tidy tree 布局常量
 const LEAF_GAP = 120 // 相邻叶子节点水平间距
-const GAP = 24 // 子树间最小间距
 
 // ---- Layout Types ----
 
@@ -40,11 +39,82 @@ export interface TreeLayout {
   height: number
 }
 
-// ---- Tidy Tree Layout ----
+// ---- Tidy Tree Layout (Reingold–Tilford, O(n)) ----
 
-interface SubtreeRange {
-  minX: number
-  maxX: number
+// R5: standard two-pass tidy tree with contour separation. The previous
+// implementation used a global leaf cursor (branches never overlapped but
+// wasted large horizontal spans, and its anti-overlap branch was dead code
+// containing a double-shift bug). This version:
+//   - first walk (post-order): place sibling subtrees against each other's
+//     right/left contours with LEAF_GAP separation, center each parent above
+//     its first and last child
+//   - second walk (pre-order): accumulate offsets into absolute x
+// Contour merging costs O(total contour length) = O(n) for the shapes
+// conversation trees take (chains, stars, binary trees).
+
+interface WalkNode {
+  layoutNode: TreeLayoutNode
+  children: WalkNode[]
+  rootX: number          // x of this node within its parent's frame
+  left: number[]         // left contour, root-relative (left[0] === 0)
+  right: number[]        // right contour, root-relative
+}
+
+function firstWalk(node: WalkNode): void {
+  if (node.children.length === 0) {
+    node.rootX = 0
+    node.left = [0]
+    node.right = [0]
+    return
+  }
+
+  const childRootXs: number[] = []
+  let mergedLeft: number[] = []
+  let mergedRight: number[] = []
+
+  node.children.forEach((child, i) => {
+    firstWalk(child)
+    let offset: number
+    if (i === 0) {
+      offset = 0
+    } else {
+      // separate this subtree from everything placed so far at every depth
+      offset = -Infinity
+      const dMax = Math.max(mergedRight.length, child.left.length)
+      for (let d = 0; d < dMax; d++) {
+        const r = mergedRight[d] ?? -Infinity
+        const l = child.left[d] ?? 0
+        offset = Math.max(offset, r - l + LEAF_GAP)
+      }
+    }
+
+    const absLeft = child.left.map((x) => x + offset)
+    const absRight = child.right.map((x) => x + offset)
+    child.rootX = offset // position of this child within the parent's frame
+    childRootXs.push(offset)
+
+    for (let d = 0; d < absLeft.length; d++) {
+      mergedLeft[d] = d < mergedLeft.length ? Math.min(mergedLeft[d], absLeft[d]) : absLeft[d]
+    }
+    for (let d = 0; d < absRight.length; d++) {
+      mergedRight[d] = d < mergedRight.length ? Math.max(mergedRight[d], absRight[d]) : absRight[d]
+    }
+  })
+
+  // center the parent above its first and last child roots: shift every child
+  // by -prelim so the children are symmetric around the parent (the classic
+  // RT "mod" adjustment, expressed through offsets)
+  const prelim = (childRootXs[0] + childRootXs[childRootXs.length - 1]) / 2
+  for (const child of node.children) child.rootX -= prelim
+  node.left = [0, ...mergedLeft.map((x) => x - prelim)]
+  node.right = [0, ...mergedRight.map((x) => x - prelim)]
+}
+
+function secondWalk(node: WalkNode, x: number): void {
+  node.layoutNode.x = x
+  for (const child of node.children) {
+    secondWalk(child, x + child.rootX)
+  }
 }
 
 /**
@@ -52,9 +122,8 @@ interface SubtreeRange {
  * - Root at top center, tree expands downward
  * - y = depth * ROW_HEIGHT
  * - Parent centered above its children
- * - Sibling subtrees laid out independently; if a parent's center would
- *   intrude into the previously laid-out sibling subtree, shift the whole
- *   subtree right to reserve space — branches never overlap.
+ * - Sibling subtrees separated by contour merging — branches never overlap,
+ *   and a linear conversation renders as a straight vertical column.
  */
 export function computeTreeLayout(
   conv: Conversation,
@@ -72,7 +141,6 @@ export function computeTreeLayout(
   }
 
   const nodes: TreeLayoutNode[] = []
-  let cursor = 0 // 叶子节点水平游标
   let maxDepth = 0
 
   // 构建节点（不含坐标）
@@ -98,76 +166,40 @@ export function computeTreeLayout(
     return layoutNode
   }
 
+  const toWalk = (layoutNode: TreeLayoutNode): WalkNode => ({
+    layoutNode,
+    children: layoutNode.children.map(toWalk),
+    rootX: 0,
+    left: [],
+    right: [],
+  })
+
   const builtRoots = rootNodes.map((r) => build(r, 0))
 
-  // 整棵子树右移
-  const shiftSubtree = (node: TreeLayoutNode, shift: number) => {
-    node.x += shift
-    for (const child of node.children) shiftSubtree(child, shift)
+  // ---- Multi-root: a virtual super-root holds the roots side by side ----
+  const virtualRoot: WalkNode = {
+    layoutNode: null as unknown as TreeLayoutNode, // never walked in second pass
+    children: builtRoots.map(toWalk),
+    rootX: 0,
+    left: [],
+    right: [],
   }
 
-  // 子树水平范围（contour）
-  const subtreeRange = (node: TreeLayoutNode): SubtreeRange => {
-    let minX = node.x
-    let maxX = node.x
-    for (const child of node.children) {
-      const r = subtreeRange(child)
-      minX = Math.min(minX, r.minX)
-      maxX = Math.max(maxX, r.maxX)
+  if (virtualRoot.children.length > 0) {
+    firstWalk(virtualRoot)
+    // the virtual root's children are the real roots — apply absolute positions
+    for (const child of virtualRoot.children) {
+      secondWalk(child, child.rootX)
     }
-    return { minX, maxX }
-  }
-
-  // 后序遍历布局：返回子树范围
-  const layout = (node: TreeLayoutNode, prevSiblingMaxX: number): SubtreeRange => {
-    if (node.children.length === 0) {
-      // 叶子 / 折叠节点：游标分配 x
-      node.x = cursor
-      cursor += LEAF_GAP
-      return { minX: node.x, maxX: node.x }
+    // shift the whole drawing to the right margin
+    let minX = Infinity
+    for (const layoutNode of nodes) {
+      minX = Math.min(minX, layoutNode.x)
     }
-
-    // 先布局所有子树，记录每个子树的右侧边界（防重叠）
-    let prevMaxX = prevSiblingMaxX
-    for (const child of node.children) {
-      const range = layout(child, prevMaxX)
-      prevMaxX = range.maxX
+    if (minX !== Infinity) {
+      const shift = MARGIN_X - minX
+      for (const layoutNode of nodes) layoutNode.x += shift
     }
-
-    // 父节点居中于首尾子节点
-    const first = node.children[0]
-    const last = node.children[node.children.length - 1]
-    node.x = (first.x + last.x) / 2
-
-    // 若居中位置侵入左侧兄弟子树（含间距）→ 整棵子树右移预留
-    const ownRange = subtreeRange(node)
-    if (node.x < prevSiblingMaxX + GAP) {
-      const shift = prevSiblingMaxX + GAP - node.x
-      shiftSubtree(node, shift)
-      node.x += shift
-      return { minX: ownRange.minX + shift, maxX: ownRange.maxX + shift }
-    }
-    return ownRange
-  }
-
-  // 多个根：依次布局（根之间也保持间距）
-  let prevMaxX = -Infinity
-  for (const root of builtRoots) {
-    layout(root, prevMaxX)
-    prevMaxX = subtreeRange(root).maxX
-  }
-
-  // 整体平移使根居中于画布
-  const totalRange = builtRoots.reduce<SubtreeRange>(
-    (acc, root) => {
-      const r = subtreeRange(root)
-      return { minX: Math.min(acc.minX, r.minX), maxX: Math.max(acc.maxX, r.maxX) }
-    },
-    { minX: Infinity, maxX: -Infinity }
-  )
-  if (builtRoots.length > 0 && totalRange.minX !== Infinity) {
-    const shift = MARGIN_X - totalRange.minX
-    for (const root of builtRoots) shiftSubtree(root, shift)
   }
 
   // ---- Edges ----
@@ -181,16 +213,15 @@ export function computeTreeLayout(
   builtRoots.forEach(walkEdges)
 
   // ---- Bounds ----
-  const finalRange = builtRoots.reduce<SubtreeRange>(
-    (acc, root) => {
-      const r = subtreeRange(root)
-      return { minX: Math.min(acc.minX, r.minX), maxX: Math.max(acc.maxX, r.maxX) }
-    },
-    { minX: Infinity, maxX: -Infinity }
-  )
-  const width = finalRange.minX === Infinity
+  let minX = Infinity
+  let maxX = -Infinity
+  for (const n of nodes) {
+    minX = Math.min(minX, n.x)
+    maxX = Math.max(maxX, n.x)
+  }
+  const width = nodes.length === 0
     ? MARGIN_X * 2 + LEAF_GAP
-    : finalRange.maxX - finalRange.minX + MARGIN_X * 2
+    : maxX - minX + MARGIN_X * 2
   const height = MARGIN_Y + (maxDepth + 1) * ROW_HEIGHT + ROW_HEIGHT
 
   return { nodes, edges, depth: maxDepth, width, height }

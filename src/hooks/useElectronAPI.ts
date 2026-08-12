@@ -1,5 +1,4 @@
 import { useCallback } from 'react'
-import type { FileDirEntry } from '../types'
 
 /**
  * Hook to access Electron APIs safely.

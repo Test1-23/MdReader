@@ -4,6 +4,8 @@ import electron from 'vite-plugin-electron'
 import electronRenderer from 'vite-plugin-electron-renderer'
 
 export default defineConfig({
+  // B5: absolute "/assets/..." paths break under loadFile (file:// protocol)
+  base: './',
   plugins: [
     react(),
     electron([
@@ -36,8 +38,6 @@ export default defineConfig({
     electronRenderer()
   ],
   build: {
-    outDir: 'dist',
-    // B5: absolute "/assets/..." paths break under loadFile (file:// protocol)
-    base: './',
+    outDir: 'dist'
   }
 })

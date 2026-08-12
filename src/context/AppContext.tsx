@@ -1,11 +1,9 @@
 import React, { createContext, useContext, useReducer } from 'react'
 import type { LayoutState, LayoutAction, UIState, UIAction, UIStateView, AIChatState } from '../types'
-import { isEditorGroup, isSplitNode } from '../types'
 import {
   findGroup,
   findGroupContainingTab,
   transformNode,
-  getFirstGroup,
   getActiveTab,
   resizeSplit,
 } from '../utils/layout'

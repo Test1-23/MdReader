@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   createEditorGroup, addTabToGroup, removeTabById, removeTabFromGroup,
-  splitGroup, splitWithTab, moveTab, splitWithFile, promoteSibling,
+  splitGroup, splitWithTab, moveTab, promoteSibling,
   transformNode, collectAllTabs, assertLayoutInvariants, findGroup, getActiveTab,
 } from '../layout'
 import { isSplitNode } from '../../types'

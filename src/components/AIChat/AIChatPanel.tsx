@@ -10,6 +10,7 @@ import { useAiStream } from '../../hooks/useAiStream'
 import type { ConvUpdater } from '../../hooks/useAiStream'
 import { useDebouncedPersist } from '../../hooks/useDebouncedPersist'
 import { persistConversation, loadValidatedConversation } from './conversationPersistence'
+import { VIEW_BTN_INACTIVE } from '../shared/classes'
 import { ChatView } from './ChatView'
 import { ChatTreeView } from './ChatTreeView'
 import { ChatInput } from './ChatInput'
@@ -24,7 +25,7 @@ interface AIChatPanelProps {
 const CONFIG_HINT = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
 
 export function AIChatPanel({ tabId }: AIChatPanelProps) {
-  const { state: uiState, dispatch: uiDispatch } = useUIContext()
+  const { state: uiState } = useUIContext()
   const { state: aiState, dispatch: aiDispatch } = useAIContext()
   const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
@@ -268,7 +269,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
             onClick={() => setViewMode('chat')}
             className={`
               w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${viewMode === 'chat' ? 'bg-blue-500 text-white' : 'text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'}
+              ${viewMode === 'chat' ? 'bg-blue-500 text-white' : VIEW_BTN_INACTIVE}
             `}
             title="Chat View"
           >
@@ -278,7 +279,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
             onClick={() => setViewMode('tree')}
             className={`
               w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${viewMode === 'tree' ? 'bg-blue-500 text-white' : 'text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'}
+              ${viewMode === 'tree' ? 'bg-blue-500 text-white' : VIEW_BTN_INACTIVE}
             `}
             title="Tree View"
           >
@@ -288,7 +289,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
             onClick={() => setViewMode('list')}
             className={`
               w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${viewMode === 'list' ? 'bg-blue-500 text-white' : 'text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'}
+              ${viewMode === 'list' ? 'bg-blue-500 text-white' : VIEW_BTN_INACTIVE}
             `}
             title="Conversations"
           >

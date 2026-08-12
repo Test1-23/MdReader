@@ -192,10 +192,11 @@ export function splitWithTab(
 // ---- Promote Sibling (close group → lift sibling) ----
 
 function replaceNode(root: LayoutNode, targetId: string, replacement: LayoutNode): LayoutNode {
-  if (isEditorGroup(root)) return root.id === targetId ? replacement : root
-  const split = root as SplitNode
-  if (split.id === targetId) return replacement
-  return { ...split, children: split.children.map((c) => replaceNode(c, targetId, replacement)) }
+  return mapTree(
+    root,
+    (group) => (group.id === targetId ? replacement : group),
+    (split, children, sizes) => (split.id === targetId ? replacement : { ...split, children, sizes })
+  )!
 }
 
 export function promoteSibling(root: LayoutNode, groupId: string): LayoutNode {
@@ -315,76 +316,26 @@ export function resizeSplit(root: LayoutNode, splitId: string, sizes: number[]):
 
 // ---- Layout Tree Helpers ----
 
-export function transformNode(
-  node: LayoutNode,
-  targetId: string,
-  fn: (group: EditorGroup) => LayoutNode
-): LayoutNode {
-  if (isEditorGroup(node)) {
-    if (node.id === targetId) {
-      return fn(node)
-    }
-    return node
-  }
+// R4: single tree catamorphism — transformNode / transformSplit / replaceNode /
+// removeNode are all "recursively map groups (and optionally splits), rebuild
+// ancestor splits, renormalize sizes when children are dropped". Returning null
+// from a handler removes that node.
+export function mapTree(
+  root: LayoutNode,
+  onGroup: (group: EditorGroup) => LayoutNode | null,
+  onSplit?: (split: SplitNode, children: LayoutNode[], sizes: number[]) => LayoutNode | null
+): LayoutNode | null {
+  if (isEditorGroup(root)) return onGroup(root)
 
-  // SplitNode
-  const split = node as SplitNode
-  if (split.id === targetId) {
-    // Can't transform a split node with group transform
-    return node
-  }
-
-  return {
-    ...split,
-    children: split.children.map((child) => transformNode(child, targetId, fn)),
-  }
-}
-
-function transformSplit(
-  node: LayoutNode,
-  targetId: string,
-  fn: (split: SplitNode) => SplitNode
-): LayoutNode {
-  if (isEditorGroup(node)) return node
-
-  const split = node as SplitNode
-  if (split.id === targetId) {
-    return fn(split)
-  }
-
-  return {
-    ...split,
-    children: split.children.map((child) => transformSplit(child, targetId, fn)),
-  }
-}
-
-// B10: removing a group inside a nested split must not leave a ghost pane.
-// Children that disappear contribute nothing; the remaining sizes are
-// re-normalized (B20e). When an inner split loses all children it is removed
-// entirely, and the caller re-normalizes — no zero-width replacement groups.
-function removeNodeInternal(node: LayoutNode, targetId: string): LayoutNode | null {
-  if (isEditorGroup(node)) {
-    if (node.id === targetId) return null
-    // Direct call on a non-matching group root — keep the group but empty it
-    return { ...node, tabs: [], activeTabIndex: -1 }
-  }
-
-  const split = node as SplitNode
+  const split = root as SplitNode
   const kept: LayoutNode[] = []
   const keptSizes: number[] = []
   split.children.forEach((child, i) => {
-    if (isEditorGroup(child)) {
-      if (child.id === targetId) return // removed — its size is dropped
-      kept.push(child)
-      keptSizes.push(split.sizes[i] ?? 0)
-    } else {
-      const result = removeNodeInternal(child, targetId)
-      if (result === null) return // whole subtree removed
-      kept.push(result)
-      keptSizes.push(split.sizes[i] ?? 0)
-    }
+    const mapped = mapTree(child, onGroup, onSplit)
+    if (mapped === null) return // removed — its size is dropped
+    kept.push(mapped)
+    keptSizes.push(split.sizes[i] ?? 0)
   })
-
   if (kept.length === 0) return null
 
   // B20e: normalize remaining sizes to sum 100
@@ -393,11 +344,38 @@ function removeNodeInternal(node: LayoutNode, targetId: string): LayoutNode | nu
     ? keptSizes.map((s) => Math.round((s / total) * 100))
     : kept.map(() => Math.round(100 / kept.length))
 
+  if (onSplit) return onSplit(split, kept, sizes)
   return { ...split, children: kept, sizes }
 }
 
-function removeNode(node: LayoutNode, targetId: string): LayoutNode {
-  return removeNodeInternal(node, targetId) ?? createEditorGroup()
+export function transformNode(
+  root: LayoutNode,
+  targetId: string,
+  fn: (group: EditorGroup) => LayoutNode
+): LayoutNode {
+  return mapTree(root, (group) => (group.id === targetId ? fn(group) : group))!
+}
+
+function transformSplit(
+  root: LayoutNode,
+  targetId: string,
+  fn: (split: SplitNode) => SplitNode
+): LayoutNode {
+  return mapTree(root, (group) => group, (split, children, sizes) =>
+    split.id === targetId ? fn(split) : { ...split, children, sizes }
+  )!
+}
+
+// B10: removing a group inside a nested split must not leave a ghost pane.
+// Children that disappear contribute nothing; the remaining sizes are
+// re-normalized (B20e). When an inner split loses all children it is removed
+// entirely — no zero-width replacement groups.
+function removeNodeInternal(root: LayoutNode, targetId: string): LayoutNode | null {
+  return mapTree(root, (group) => (group.id === targetId ? null : group))
+}
+
+function removeNode(root: LayoutNode, targetId: string): LayoutNode {
+  return removeNodeInternal(root, targetId) ?? createEditorGroup()
 }
 
 // ---- Find Operations ----
