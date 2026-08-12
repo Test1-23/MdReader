@@ -34,8 +34,9 @@
 - Regenerate, edit, and resend messages
 - Copy message content
 - Deep thinking (reasoning) support — collapsible `reasoning_content` block
-- Conversation management: save, load, rename, delete conversations
-- Settings panel for API endpoint, key, and model (encrypted via Electron `safeStorage`)
+- Conversation management: save, load, rename, delete conversations (atomic writes, auto-repair on load)
+- Settings panel for API endpoint, key, and model (encrypted via Electron `safeStorage`; the key never enters the renderer)
+- 🧠 Deep Think sends `chat_template_kwargs: {thinking: true}` (DeepSeek-compatible; ignored by providers that don't support it)
 
 ### UI/UX
 - Dark mode with system-adaptive styling
