@@ -1,17 +1,11 @@
 import { IpcMain } from 'electron'
 import { readFile, readdir, stat } from 'fs/promises'
 import { extname, join } from 'path'
-
-interface FileDirEntry {
-  name: string
-  path: string
-  isDirectory: boolean
-  isFile: boolean
-  extension: string
-}
+import type { FileDirEntry } from '../../src/types/ipc'
+import { IPC_CHANNELS } from './channels'
 
 export function registerFileHandlers(ipcMain: IpcMain) {
-  ipcMain.handle('file:read', async (_event, filePath: string) => {
+  ipcMain.handle(IPC_CHANNELS.FILE_READ, async (_event, filePath: string) => {
     try {
       const content = await readFile(filePath, 'utf-8')
       const stats = await stat(filePath)
@@ -26,7 +20,7 @@ export function registerFileHandlers(ipcMain: IpcMain) {
     }
   })
 
-  ipcMain.handle('file:readDir', async (_event, dirPath: string) => {
+  ipcMain.handle(IPC_CHANNELS.FILE_READ_DIR, async (_event, dirPath: string) => {
     try {
       const entries = await readdir(dirPath, { withFileTypes: true })
       const result: FileDirEntry[] = entries
@@ -60,7 +54,7 @@ export function registerFileHandlers(ipcMain: IpcMain) {
     }
   })
 
-  ipcMain.handle('file:getInfo', async (_event, filePath: string) => {
+  ipcMain.handle(IPC_CHANNELS.FILE_GET_INFO, async (_event, filePath: string) => {
     try {
       const stats = await stat(filePath)
       return {

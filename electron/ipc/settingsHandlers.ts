@@ -1,29 +1,12 @@
 import { IpcMain, safeStorage } from 'electron'
-import { readFile, writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { app } from 'electron'
-
-interface ApiConfig {
-  endpoint: string
-  apiKey: string
-  model: string
-}
-
-const CONFIG_FILENAME = 'api-config.json'
-
-function configPath(): string {
-  const userDataPath = app.getPath('userData')
-  return join(userDataPath, 'mdreader', CONFIG_FILENAME)
-}
-
-async function ensureDir(dir: string) {
-  try { await mkdir(dir, { recursive: true }) } catch { /* exists */ }
-}
+import { readFile, writeFile, unlink } from 'fs/promises'
+import type { ApiConfig } from '../../src/types/ipc'
+import { IPC_CHANNELS } from './channels'
+import { configPath, ensureDir, userDataDir } from './paths'
 
 export function registerSettingsHandlers(ipcMain: IpcMain) {
-  ipcMain.handle('settings:saveApiConfig', async (_event, config: ApiConfig) => {
-    const dir = join(app.getPath('userData'), 'mdreader')
-    await ensureDir(dir)
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SAVE, async (_event, config: ApiConfig) => {
+    await ensureDir(userDataDir())
 
     // Encrypt the API key
     const encrypted = safeStorage.encryptString(config.apiKey)
@@ -35,7 +18,7 @@ export function registerSettingsHandlers(ipcMain: IpcMain) {
     await writeFile(configPath(), JSON.stringify(data, null, 2), 'utf-8')
   })
 
-  ipcMain.handle('settings:loadApiConfig', async (): Promise<ApiConfig | null> => {
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_LOAD, async (): Promise<ApiConfig | null> => {
     try {
       const raw = await readFile(configPath(), 'utf-8')
       const data = JSON.parse(raw)
@@ -51,11 +34,9 @@ export function registerSettingsHandlers(ipcMain: IpcMain) {
     }
   })
 
-  ipcMain.handle('settings:clearApiConfig', async () => {
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_CLEAR, async () => {
     try {
-      const path = configPath()
-      const { unlink } = await import('fs/promises')
-      await unlink(path)
+      await unlink(configPath())
     } catch { /* doesn't exist */ }
   })
 }

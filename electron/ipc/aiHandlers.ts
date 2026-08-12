@@ -1,33 +1,16 @@
-import { IpcMain } from 'electron'
-import { readFile, writeFile, mkdir, readdir, unlink } from 'fs/promises'
+import { IpcMain, app } from 'electron'
+import { readFile, writeFile, readdir, unlink } from 'fs/promises'
 import { join } from 'path'
-import { app } from 'electron'
-
-interface ChatMessage {
-  role: string
-  content: string
-}
-
-interface ApiConfig {
-  endpoint: string
-  apiKey: string
-  model: string
-}
-
-function convDir(): string {
-  return join(app.getPath('userData'), 'mdreader', 'conversations')
-}
-
-async function ensureDir(dir: string) {
-  try { await mkdir(dir, { recursive: true }) } catch { /* exists */ }
-}
+import type { ApiConfig, ChatMessage } from '../../src/types/ipc'
+import { IPC_CHANNELS } from './channels'
+import { convDir, ensureDir } from './paths'
 
 // ---- AI Chat ----
 
 const activeStreams = new Map<string, AbortController>()
 
 export function registerAiHandlers(ipcMain: IpcMain) {
-  ipcMain.handle('ai:chat', async (_event, messages: ChatMessage[], config: ApiConfig) => {
+  ipcMain.handle(IPC_CHANNELS.AI_CHAT, async (_event, messages: ChatMessage[], config: ApiConfig) => {
     const url = `${config.endpoint.replace(/\/$/, '')}/chat/completions`
 
     const response = await fetch(url, {
@@ -53,7 +36,7 @@ export function registerAiHandlers(ipcMain: IpcMain) {
   })
 
   // 流式：SSE 解析，逐块通过 IPC 事件推送到渲染进程
-  ipcMain.handle('ai:chatStream', async (event, requestId: string, messages: ChatMessage[], config: ApiConfig) => {
+  ipcMain.handle(IPC_CHANNELS.AI_CHAT_STREAM, async (event, requestId: string, messages: ChatMessage[], config: ApiConfig) => {
     const controller = new AbortController()
     activeStreams.set(requestId, controller)
 
@@ -99,35 +82,35 @@ export function registerAiHandlers(ipcMain: IpcMain) {
             const json = JSON.parse(data)
             const delta = json.choices?.[0]?.delta?.content
             const reasoning = json.choices?.[0]?.delta?.reasoning_content
-            if (delta) event.sender.send('ai:chat-chunk', { requestId, delta })
-            if (reasoning) event.sender.send('ai:chat-reasoning', { requestId, delta: reasoning })
+            if (delta) event.sender.send(IPC_CHANNELS.AI_CHUNK, { requestId, delta })
+            if (reasoning) event.sender.send(IPC_CHANNELS.AI_REASONING, { requestId, delta: reasoning })
           } catch { /* skip partial lines */ }
         }
       }
 
-      event.sender.send('ai:chat-done', { requestId })
+      event.sender.send(IPC_CHANNELS.AI_DONE, { requestId })
     } catch (err) {
       if (!controller.signal.aborted) {
-        event.sender.send('ai:chat-error', { requestId, message: err instanceof Error ? err.message : String(err) })
+        event.sender.send(IPC_CHANNELS.AI_ERROR, { requestId, message: err instanceof Error ? err.message : String(err) })
       }
     } finally {
       activeStreams.delete(requestId)
     }
   })
 
-  ipcMain.handle('ai:cancelStream', (_event, requestId: string) => {
+  ipcMain.handle(IPC_CHANNELS.AI_CANCEL_STREAM, (_event, requestId: string) => {
     activeStreams.get(requestId)?.abort()
   })
 
   // ---- Conversation Persistence ----
 
-  ipcMain.handle('ai:saveConversation', async (_event, id: string, data: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.AI_SAVE_CONVERSATION, async (_event, id: string, data: unknown) => {
     const dir = convDir()
     await ensureDir(dir)
     await writeFile(join(dir, `${id}.json`), JSON.stringify(data, null, 2), 'utf-8')
   })
 
-  ipcMain.handle('ai:loadConversation', async (_event, id: string) => {
+  ipcMain.handle(IPC_CHANNELS.AI_LOAD_CONVERSATION, async (_event, id: string) => {
     try {
       const raw = await readFile(join(convDir(), `${id}.json`), 'utf-8')
       return JSON.parse(raw)
@@ -136,7 +119,7 @@ export function registerAiHandlers(ipcMain: IpcMain) {
     }
   })
 
-  ipcMain.handle('ai:listConversations', async () => {
+  ipcMain.handle(IPC_CHANNELS.AI_LIST_CONVERSATIONS, async () => {
     try {
       const dir = convDir()
       await ensureDir(dir)
@@ -156,7 +139,7 @@ export function registerAiHandlers(ipcMain: IpcMain) {
     }
   })
 
-  ipcMain.handle('ai:deleteConversation', async (_event, id: string) => {
+  ipcMain.handle(IPC_CHANNELS.AI_DELETE_CONVERSATION, async (_event, id: string) => {
     try { await unlink(join(convDir(), `${id}.json`)) } catch { /* doesn't exist */ }
   })
 }

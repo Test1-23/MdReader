@@ -1,7 +1,8 @@
 import { IpcMain, BrowserWindow, dialog } from 'electron'
+import { IPC_CHANNELS } from './channels'
 
 export function registerDialogHandlers(ipcMain: IpcMain, mainWindow: BrowserWindow) {
-  ipcMain.handle('dialog:openFile', async () => {
+  ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_FILE, async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Open Markdown File',
       filters: [
@@ -18,7 +19,7 @@ export function registerDialogHandlers(ipcMain: IpcMain, mainWindow: BrowserWind
     return result.filePaths[0]
   })
 
-  ipcMain.handle('dialog:openFolder', async () => {
+  ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_FOLDER, async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Open Folder',
       properties: ['openDirectory'],
