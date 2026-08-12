@@ -51,8 +51,10 @@ export function AIChatPanel() {
     const onMove = (ev: MouseEvent) => {
       if (!dragRef.current) return
       const { start, startSize, axis: a } = dragRef.current
-      let delta = a === 'x' ? ev.clientX - start : ev.clientY - start
-      if (a === 'x' && position === 'left') delta = -delta // left 面板往左拖变宽
+      // 向面板外侧拖 = 面板变大：
+      // - left/right 面板 handle 在面板内缘，向左拖（clientX 减小）应变宽
+      // - bottom 面板 handle 在上缘，向上拖（clientY 减小）应变高
+      const delta = a === 'x' ? -(ev.clientX - start) : -(ev.clientY - start)
       const size = a === 'x'
         ? Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startSize + delta))
         : Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, startSize + delta))
@@ -321,6 +323,7 @@ export function AIChatPanel() {
         <ChatView
           conv={conv}
           activeNodeId={conv.activeNodeId}
+          loading={loading}
           onSwitchBranch={handleSwitchBranch}
           onCopy={handleCopy}
           onRegenerate={handleRegenerate}

@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { ChatNode } from '../../utils/conversationTree'
 
 interface ChatBubbleProps {
   node: ChatNode
   isActive: boolean
+  loading: boolean
   onCopy: (nodeId: string) => void
   onRegenerate: (nodeId: string) => void
   onEdit: (nodeId: string, newText: string) => void
@@ -12,9 +13,12 @@ interface ChatBubbleProps {
   initialEditText?: string
 }
 
+const BTN_BASE = 'px-1.5 py-0.5 text-[10px] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+
 export function ChatBubble({
   node,
   isActive,
+  loading,
   onCopy,
   onRegenerate,
   onEdit,
@@ -24,6 +28,15 @@ export function ChatBubble({
 }: ChatBubbleProps) {
   const isUser = node.role === 'user'
   const [editText, setEditText] = useState(initialEditText ?? node.content)
+  const [copied, setCopied] = useState(false)
+  const copyTimer = useRef<ReturnType<typeof setTimeout>>()
+
+  const handleCopyClick = () => {
+    onCopy(node.id)
+    setCopied(true)
+    if (copyTimer.current) clearTimeout(copyTimer.current)
+    copyTimer.current = setTimeout(() => setCopied(false), 2000)
+  }
 
   // 编辑模式下显示 textarea
   if (editing) {
@@ -89,36 +102,39 @@ export function ChatBubble({
         {/* 常驻操作按钮 */}
         <div className="flex gap-1 mt-0.5 px-1">
           <button
-            onClick={() => onCopy(node.id)}
-            className="px-1.5 py-0.5 text-[10px] text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+            onClick={handleCopyClick}
+            className={`${BTN_BASE} text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800 ${copied ? '!text-green-500 !bg-green-50 dark:!bg-green-900/30' : ''}`}
             title="复制"
           >
-            📋 复制
+            {copied ? '✓ 已复制' : '📋 复制'}
           </button>
           {isUser ? (
             <>
               <button
                 onClick={() => onEdit(node.id, node.content)}
-                className="px-1.5 py-0.5 text-[10px] text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                disabled={loading}
+                className={`${BTN_BASE} text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800`}
                 title="编辑"
               >
                 ✏️ 编辑
               </button>
               <button
                 onClick={() => onRegenerate(node.id)}
-                className="px-1.5 py-0.5 text-[10px] text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                disabled={loading}
+                className={`${BTN_BASE} text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800`}
                 title="重发（覆盖回复）"
               >
-                🔄 重发
+                {loading ? '⏳ 重发中...' : '🔄 重发'}
               </button>
             </>
           ) : (
             <button
               onClick={() => onRegenerate(node.id)}
-              className="px-1.5 py-0.5 text-[10px] text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+              disabled={loading}
+              className={`${BTN_BASE} text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800`}
               title="重新生成"
             >
-              🔄 重新生成
+              {loading ? '⏳ 生成中...' : '🔄 重新生成'}
             </button>
           )}
         </div>

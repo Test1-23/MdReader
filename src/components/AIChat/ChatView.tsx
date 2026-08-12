@@ -6,6 +6,7 @@ import { ChatBubble } from './ChatBubble'
 interface ChatViewProps {
   conv: Conversation
   activeNodeId: string | null
+  loading: boolean
   onSwitchBranch: (nodeId: string) => void
   onCopy: (nodeId: string) => void
   onRegenerate: (nodeId: string) => void
@@ -21,7 +22,7 @@ function getBranchEntries(conv: Conversation, nodeId: string, activePathIds: Set
     .filter((child): child is ChatNode => !!child && !activePathIds.has(child.id))
 }
 
-export function ChatView({ conv, activeNodeId, onSwitchBranch, onCopy, onRegenerate, onEdit }: ChatViewProps) {
+export function ChatView({ conv, activeNodeId, loading, onSwitchBranch, onCopy, onRegenerate, onEdit }: ChatViewProps) {
   const activePath = getActivePath(conv)
   const activePathIds = new Set(activePath.map((n) => n.id))
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -51,6 +52,7 @@ export function ChatView({ conv, activeNodeId, onSwitchBranch, onCopy, onRegener
           <ChatBubble
             node={node}
             isActive={node.id === activeNodeId}
+            loading={loading}
             onCopy={onCopy}
             onRegenerate={onRegenerate}
             onEdit={handleEditConfirm}

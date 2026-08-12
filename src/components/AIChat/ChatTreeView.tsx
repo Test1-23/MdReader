@@ -98,9 +98,9 @@ export function ChatTreeView({ conv, activeNodeId, onSelectNode }: ChatTreeViewP
           </div>
         </button>
 
-        {/* Hover 详情浮层 */}
+        {/* Hover 详情浮层（位于节点下方，不遮挡节点） */}
         {isHovered && (
-          <div className="absolute left-6 top-3 z-20 w-64 max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-2 text-[11px]">
+          <div className="absolute left-6 top-8 z-20 w-64 max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-2 text-[11px]">
             <div className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
               <span className="font-semibold">👤 </span>{node.user.content}
             </div>
