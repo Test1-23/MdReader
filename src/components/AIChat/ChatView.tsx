@@ -69,6 +69,7 @@ export const ChatView = memo(function ChatView({ conv, activeNodeId, loading, on
             node={node}
             isActive={node.id === activeNodeId}
             loading={loading}
+            convId={conv.id}
             onCopy={onCopy}
             onRegenerate={onRegenerate}
             onEdit={handleEditConfirm}

@@ -5,6 +5,7 @@ export interface ChatNode {
   role: 'user' | 'assistant' | 'system'
   content: string
   reasoning?: string // 深度思考内容（reasoning_content）
+  reasoningDuration?: number // 深度思考耗时（ms）
   selectedText?: string
   timestamp: number
   parentId: string | null

@@ -23,6 +23,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const [streaming, setStreaming] = useState(false)
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
   const requestIdRef = useRef<string | null>(null)
+  const reasoningStartRef = useRef<number>(0)
 
   const selectedText = uiState.selectedText
   const conv = uiState.aiConversation ?? createConversation()
@@ -48,6 +49,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const streamAi = useCallback(async (currentConv: typeof conv, userNodeId: string): Promise<typeof conv> => {
     const requestId = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     requestIdRef.current = requestId
+    reasoningStartRef.current = 0
     setStreaming(true)
 
     // 创建/复用空 assistant 节点（流式填充）
@@ -77,11 +79,22 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
       })
       const offReasoning = window.electronAPI!.onAiReasoning!(({ requestId: rid, delta }) => {
         if (rid !== requestId) return
+        if (!reasoningStartRef.current) reasoningStartRef.current = Date.now()
         working = appendAssistantReasoning(working, userNodeId, delta)
         setConv(working)
       })
       const offDone = window.electronAPI!.onAiDone!(({ requestId: rid }) => {
         if (rid !== requestId) return
+        // 写入深度思考耗时
+        if (reasoningStartRef.current) {
+          const duration = Date.now() - reasoningStartRef.current
+          const reply = getAssistantReply(working, userNodeId)
+          if (reply) {
+            const nodes = { ...working.nodes, [reply.id]: { ...reply, reasoningDuration: duration } }
+            working = { ...working, nodes, updatedAt: Date.now() }
+            setConv(working)
+          }
+        }
         offChunk(); offReasoning(); offDone(); offError()
         resolve()
       })

@@ -5,6 +5,7 @@ interface ChatBubbleProps {
   node: ChatNode
   isActive: boolean
   loading: boolean
+  convId: string
   onCopy: (nodeId: string) => void
   onRegenerate: (nodeId: string) => void
   onEdit: (nodeId: string, newText: string) => void
@@ -19,6 +20,7 @@ export function ChatBubble({
   node,
   isActive,
   loading,
+  convId,
   onCopy,
   onRegenerate,
   onEdit,
@@ -31,11 +33,31 @@ export function ChatBubble({
   const [copied, setCopied] = useState(false)
   const [thinkingOpen, setThinkingOpen] = useState(false)
   const copyTimer = useRef<ReturnType<typeof setTimeout>>()
+  const userExpandedRef = useRef(false)
+  const lastConvIdRef = useRef(convId)
 
-  // 流式生成中思考块自动展开，完成后收起
+  // 对话切换 → 重置展开状态
+  useEffect(() => {
+    if (lastConvIdRef.current !== convId) {
+      lastConvIdRef.current = convId
+      userExpandedRef.current = false
+      setThinkingOpen(false)
+    }
+  }, [convId])
+
+  // 思考块折叠控制：
+  // - 默认全部折叠
+  // - 仅当用户手动展开了上一条 + 当前正在流式中 → 自动展开
+  // - 流式完成后保持用户选择的折叠状态
   useEffect(() => {
     if (node.reasoning) {
-      setThinkingOpen(loading)
+      if (loading && userExpandedRef.current) {
+        setThinkingOpen(true)
+      } else if (!loading) {
+        // 流式完成后保持现状
+      }
+    } else {
+      setThinkingOpen(false)
     }
   }, [node.reasoning, loading])
 
@@ -103,14 +125,21 @@ export function ChatBubble({
               {node.selectedText}
             </div>
           )}
-          {/* 可折叠思考块（深度思考） */}
+          {/* 可折叠思考块（DeepSeek 风格：粗箭头 + 耗时） */}
           {!isUser && node.reasoning && (
             <div className="mb-1.5 rounded bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
               <button
-                onClick={() => setThinkingOpen(!thinkingOpen)}
-                className="w-full px-2 py-1 text-left text-[10px] text-gray-500 dark:text-gray-400 hover:text-blue-500 transition-colors"
+                onClick={() => {
+                  setThinkingOpen(!thinkingOpen)
+                  if (!thinkingOpen) userExpandedRef.current = true
+                }}
+                className="w-full px-2 py-1 text-left text-[10px] text-gray-500 dark:text-gray-400 transition-colors"
               >
-                {thinkingOpen ? '▾' : '▸'} 已深度思考
+                <span className="font-bold">{thinkingOpen ? '▾' : '▸'}</span>
+                {' '}已深度思考
+                {node.reasoningDuration
+                  ? `（用时 ${Math.round(node.reasoningDuration / 1000)}s）`
+                  : loading ? '...' : ''}
               </button>
               {thinkingOpen && (
                 <div className="px-2 pb-1.5 text-[10px] text-gray-400 dark:text-gray-500 whitespace-pre-wrap break-words">
