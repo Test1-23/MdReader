@@ -4,6 +4,7 @@ export interface ChatNode {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  reasoning?: string // 深度思考内容（reasoning_content）
   selectedText?: string
   timestamp: number
   parentId: string | null
@@ -157,11 +158,11 @@ export function replaceNodeContent(conv: Conversation, nodeId: string, newConten
   return { ...conv, nodes, updatedAt: Date.now() }
 }
 
-// 替换 user 节点下的第一个 AI 回复内容（重新生成）
+// 替换 user 节点下的第一个 AI 回复内容（重新生成，清空 reasoning）
 export function replaceAssistantReply(conv: Conversation, userNodeId: string, newContent: string): Conversation {
   const reply = getAssistantReply(conv, userNodeId)
   if (!reply) return conv
-  const nodes = { ...conv.nodes, [reply.id]: { ...reply, content: newContent } }
+  const nodes = { ...conv.nodes, [reply.id]: { ...reply, content: newContent, reasoning: '' } }
   return { ...conv, nodes, activeNodeId: reply.id, updatedAt: Date.now() }
 }
 
@@ -170,6 +171,14 @@ export function appendAssistantContent(conv: Conversation, userNodeId: string, d
   const reply = getAssistantReply(conv, userNodeId)
   if (!reply) return conv
   const nodes = { ...conv.nodes, [reply.id]: { ...reply, content: reply.content + delta } }
+  return { ...conv, nodes, updatedAt: Date.now() }
+}
+
+// 增量追加深度思考内容（流式显示 reasoning_content）
+export function appendAssistantReasoning(conv: Conversation, userNodeId: string, delta: string): Conversation {
+  const reply = getAssistantReply(conv, userNodeId)
+  if (!reply) return conv
+  const nodes = { ...conv.nodes, [reply.id]: { ...reply, reasoning: (reply.reasoning ?? '') + delta } }
   return { ...conv, nodes, updatedAt: Date.now() }
 }
 

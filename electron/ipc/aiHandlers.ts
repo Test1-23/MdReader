@@ -98,7 +98,9 @@ export function registerAiHandlers(ipcMain: IpcMain) {
           try {
             const json = JSON.parse(data)
             const delta = json.choices?.[0]?.delta?.content
+            const reasoning = json.choices?.[0]?.delta?.reasoning_content
             if (delta) event.sender.send('ai:chat-chunk', { requestId, delta })
+            if (reasoning) event.sender.send('ai:chat-reasoning', { requestId, delta: reasoning })
           } catch { /* skip partial lines */ }
         }
       }

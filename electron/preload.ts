@@ -20,6 +20,7 @@ export interface ElectronAPI {
   aiChatStream: (requestId: string, messages: Array<{ role: string; content: string }>, config: { endpoint: string; apiKey: string; model: string }) => Promise<void>
   cancelAiStream: (requestId: string) => Promise<void>
   onAiChunk: (cb: (data: { requestId: string; delta: string }) => void) => () => void
+  onAiReasoning: (cb: (data: { requestId: string; delta: string }) => void) => () => void
   onAiDone: (cb: (data: { requestId: string }) => void) => () => void
   onAiError: (cb: (data: { requestId: string; message: string }) => void) => () => void
   saveConversation: (id: string, data: unknown) => Promise<void>
@@ -55,6 +56,11 @@ const electronAPI: ElectronAPI = {
     const listener = (_e: unknown, data: { requestId: string; delta: string }) => cb(data)
     ipcRenderer.on('ai:chat-chunk', listener)
     return () => ipcRenderer.removeListener('ai:chat-chunk', listener)
+  },
+  onAiReasoning: (cb) => {
+    const listener = (_e: unknown, data: { requestId: string; delta: string }) => cb(data)
+    ipcRenderer.on('ai:chat-reasoning', listener)
+    return () => ipcRenderer.removeListener('ai:chat-reasoning', listener)
   },
   onAiDone: (cb) => {
     const listener = (_e: unknown, data: { requestId: string }) => cb(data)

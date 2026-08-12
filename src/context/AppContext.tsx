@@ -148,6 +148,7 @@ const initialUI: UIState = {
   apiModel: '',
   selectedText: null,
   aiConversation: null,
+  conversationList: [],
 }
 
 function uiReducer(state: UIState, action: UIAction): UIState {
@@ -174,6 +175,8 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     }
     case 'SET_AI_CONVERSATION':
       return { ...state, aiConversation: action.payload }
+    case 'SET_CONVERSATION_LIST':
+      return { ...state, conversationList: action.payload }
     default:
       return state
   }

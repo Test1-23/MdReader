@@ -80,7 +80,7 @@ export const ChatView = memo(function ChatView({ conv, activeNodeId, loading, on
             <button
               key={branch.id}
               onClick={() => onSwitchBranch(branch.id)}
-              className="ml-8 my-0.5 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              className="ml-8 my-0.5 px-2 py-0.5 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
             >
               ↪ 分支 {new Date(branch.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </button>

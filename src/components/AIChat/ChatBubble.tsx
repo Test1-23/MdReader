@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import type { ChatNode } from '../../utils/conversationTree'
 
 interface ChatBubbleProps {
@@ -29,7 +29,15 @@ export function ChatBubble({
   const isUser = node.role === 'user'
   const [editText, setEditText] = useState(initialEditText ?? node.content)
   const [copied, setCopied] = useState(false)
+  const [thinkingOpen, setThinkingOpen] = useState(false)
   const copyTimer = useRef<ReturnType<typeof setTimeout>>()
+
+  // 流式生成中思考块自动展开，完成后收起
+  useEffect(() => {
+    if (node.reasoning) {
+      setThinkingOpen(loading)
+    }
+  }, [node.reasoning, loading])
 
   const handleCopyClick = () => {
     onCopy(node.id)
@@ -52,7 +60,7 @@ export function ChatBubble({
           <div className="flex justify-end gap-2 mt-1">
             <button
               onClick={onEditCancel}
-              className="px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+              className="px-2 py-0.5 text-[10px] text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
             >
               Cancel
             </button>
@@ -95,15 +103,31 @@ export function ChatBubble({
               {node.selectedText}
             </div>
           )}
+          {/* 可折叠思考块（深度思考） */}
+          {!isUser && node.reasoning && (
+            <div className="mb-1.5 rounded bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setThinkingOpen(!thinkingOpen)}
+                className="w-full px-2 py-1 text-left text-[10px] text-gray-500 dark:text-gray-400 hover:text-blue-500 transition-colors"
+              >
+                {thinkingOpen ? '▾' : '▸'} 已深度思考
+              </button>
+              {thinkingOpen && (
+                <div className="px-2 pb-1.5 text-[10px] text-gray-400 dark:text-gray-500 whitespace-pre-wrap break-words">
+                  {node.reasoning}
+                </div>
+              )}
+            </div>
+          )}
           {/* 完整内容 */}
           <div className="whitespace-pre-wrap break-words">{node.content}</div>
         </div>
 
-        {/* 常驻操作按钮 */}
+        {/* 常驻操作按钮（蓝色主题） */}
         <div className="flex gap-1 mt-0.5 px-1">
           <button
             onClick={handleCopyClick}
-            className={`${BTN_BASE} text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800 ${copied ? '!text-green-500 !bg-green-50 dark:!bg-green-900/30' : ''}`}
+            className={`${BTN_BASE} text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 ${copied ? '!text-green-500 !bg-green-50 dark:!bg-green-900/30' : ''}`}
             title="复制"
           >
             {copied ? '✓ 已复制' : '📋 复制'}
@@ -113,7 +137,7 @@ export function ChatBubble({
               <button
                 onClick={() => onEdit(node.id, node.content)}
                 disabled={loading}
-                className={`${BTN_BASE} text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800`}
+                className={`${BTN_BASE} text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30`}
                 title="编辑"
               >
                 ✏️ 编辑
@@ -121,7 +145,7 @@ export function ChatBubble({
               <button
                 onClick={() => onRegenerate(node.id)}
                 disabled={loading}
-                className={`${BTN_BASE} text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800`}
+                className={`${BTN_BASE} text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30`}
                 title="重发（覆盖回复）"
               >
                 {loading ? '⏳ 重发中...' : '🔄 重发'}
@@ -131,7 +155,7 @@ export function ChatBubble({
             <button
               onClick={() => onRegenerate(node.id)}
               disabled={loading}
-              className={`${BTN_BASE} text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800`}
+              className={`${BTN_BASE} text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30`}
               title="重新生成"
             >
               {loading ? '⏳ 生成中...' : '🔄 重新生成'}

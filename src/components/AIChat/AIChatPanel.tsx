@@ -3,13 +3,15 @@ import { useLayoutContext, useUIContext } from '../../context/AppContext'
 import {
   createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages,
   getAssistantReply, replaceNodeContent, replaceAssistantReply, appendAssistantContent,
+  appendAssistantReasoning,
 } from '../../utils/conversationTree'
 import { findGroupContainingTab } from '../../utils/layout'
 import { ChatView } from './ChatView'
 import { ChatTreeView } from './ChatTreeView'
 import { ChatInput } from './ChatInput'
+import { ConversationList } from './ConversationList'
 
-type ChatViewMode = 'chat' | 'tree'
+type ChatViewMode = 'chat' | 'tree' | 'list'
 
 interface AIChatPanelProps {
   tabId: string // 本窗口在布局树中的 tab id（用于关闭）
@@ -73,16 +75,21 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
         working = appendAssistantContent(working, userNodeId, delta)
         setConv(working)
       })
+      const offReasoning = window.electronAPI!.onAiReasoning!(({ requestId: rid, delta }) => {
+        if (rid !== requestId) return
+        working = appendAssistantReasoning(working, userNodeId, delta)
+        setConv(working)
+      })
       const offDone = window.electronAPI!.onAiDone!(({ requestId: rid }) => {
         if (rid !== requestId) return
-        offChunk(); offDone(); offError()
+        offChunk(); offReasoning(); offDone(); offError()
         resolve()
       })
       const offError = window.electronAPI!.onAiError!(({ requestId: rid, message }) => {
         if (rid !== requestId) return
         working = appendAssistantContent(working, userNodeId, `\n\nError: ${message}`)
         setConv(working)
-        offChunk(); offDone(); offError()
+        offChunk(); offReasoning(); offDone(); offError()
         resolve()
       })
       window.electronAPI!.aiChatStream(requestId, messages as any, config)
@@ -194,6 +201,55 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     }
   }, [layoutState.layoutRoot, tabId, layoutDispatch])
 
+  // ---- 对话管理 ----
+  const saveCurrentConv = useCallback((c: typeof conv) => {
+    if (window.electronAPI?.saveConversation) {
+      window.electronAPI.saveConversation(c.id, c)
+    }
+  }, [])
+
+  const refreshList = useCallback(() => {
+    window.electronAPI?.listConversations()?.then((list) => {
+      uiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
+    })
+  }, [uiDispatch])
+
+  const handleNewChat = useCallback(() => {
+    if (conv.rootId) saveCurrentConv(conv) // 切换前保存当前对话
+    setConv(createConversation())
+    setViewMode('chat')
+    refreshList()
+  }, [conv, saveCurrentConv, setConv, refreshList])
+
+  const handleSelectConversation = useCallback(async (id: string) => {
+    if (conv.rootId && conv.id !== id) saveCurrentConv(conv)
+    const data = await window.electronAPI?.loadConversation(id)
+    if (data && typeof data === 'object' && 'nodes' in data) {
+      setConv(data as typeof conv)
+    }
+    setViewMode('chat')
+    refreshList()
+  }, [conv, saveCurrentConv, setConv, refreshList])
+
+  const handleRenameConversation = useCallback(async (id: string, title: string) => {
+    const data = await window.electronAPI?.loadConversation(id)
+    if (data && typeof data === 'object' && 'nodes' in data) {
+      const updated = { ...(data as typeof conv), title }
+      await window.electronAPI?.saveConversation(id, updated)
+      if (conv.id === id) setConv(updated)
+      refreshList()
+    }
+  }, [conv.id, setConv, refreshList])
+
+  const handleDeleteConversation = useCallback(async (id: string) => {
+    await window.electronAPI?.deleteConversation(id)
+    if (conv.id === id) {
+      setConv(createConversation())
+      setViewMode('chat')
+    }
+    refreshList()
+  }, [conv.id, setConv, refreshList])
+
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900">
       {/* Header */}
@@ -208,7 +264,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
             onClick={() => setViewMode('chat')}
             className={`
               w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${viewMode === 'chat' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}
+              ${viewMode === 'chat' ? 'bg-blue-500 text-white' : 'text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'}
             `}
             title="Chat View"
           >
@@ -218,18 +274,28 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
             onClick={() => setViewMode('tree')}
             className={`
               w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${viewMode === 'tree' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}
+              ${viewMode === 'tree' ? 'bg-blue-500 text-white' : 'text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'}
             `}
             title="Tree View"
           >
             🌳
           </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`
+              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
+              ${viewMode === 'list' ? 'bg-blue-500 text-white' : 'text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'}
+            `}
+            title="Conversations"
+          >
+            🗂
+          </button>
         </div>
 
         {/* 新建对话 */}
         <button
-          onClick={() => setConv(createConversation())}
-          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          onClick={handleNewChat}
+          className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400"
           title="New Chat"
         >
           +
@@ -237,7 +303,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
         {/* 关闭窗口 */}
         <button
           onClick={handleClose}
-          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400"
           title="Close Window"
         >
           ×
@@ -245,7 +311,15 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
       </div>
 
       {/* 视图内容 */}
-      {viewMode === 'chat' ? (
+      {viewMode === 'list' ? (
+        <ConversationList
+          conv={conv}
+          onSelect={handleSelectConversation}
+          onRename={handleRenameConversation}
+          onDelete={handleDeleteConversation}
+          onNew={handleNewChat}
+        />
+      ) : viewMode === 'chat' ? (
         <ChatView
           conv={conv}
           activeNodeId={conv.activeNodeId}

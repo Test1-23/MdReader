@@ -108,6 +108,7 @@ export interface UIState {
   // AI Chat
   selectedText: string | null
   aiConversation: import('../utils/conversationTree').Conversation | null
+  conversationList: Array<{ id: string; title: string; updatedAt: number }>
 }
 
 // ---- App Actions ----
@@ -147,6 +148,7 @@ export type UIAction =
   | { type: 'SETTINGS_UPDATE'; payload: { endpoint: string; apiKey: string; model: string } }
   | { type: 'SET_SELECTION'; payload: { text: string | null } }
   | { type: 'SET_AI_CONVERSATION'; payload: import('../utils/conversationTree').Conversation | null }
+  | { type: 'SET_CONVERSATION_LIST'; payload: Array<{ id: string; title: string; updatedAt: number }> }
 
 // ---- Layout Helper ----
 

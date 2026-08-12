@@ -9,6 +9,7 @@ interface ChatInputProps {
 
 export function ChatInput({ selectedText, onSend, streaming, onStop }: ChatInputProps) {
   const [input, setInput] = useState('')
+  const [deepThink, setDeepThink] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const didFocus = useRef(false)
 
@@ -43,6 +44,21 @@ export function ChatInput({ selectedText, onSend, streaming, onStop }: ChatInput
           {selectedText.length > 200 && '...'}
         </div>
       )}
+      {/* 深度思考开关（输入框上方，仿 DeepSeek） */}
+      <div className="flex gap-2 mb-2">
+        <button
+          onClick={() => setDeepThink(!deepThink)}
+          className={`
+            px-3 py-1 rounded-full text-[10px] border transition-colors
+            ${deepThink
+              ? 'bg-blue-500 text-white border-blue-500'
+              : 'text-blue-500 border-blue-300 hover:bg-blue-50 dark:border-blue-600 dark:hover:bg-blue-900/30'}
+          `}
+          title="深度思考"
+        >
+          🧠 深度思考
+        </button>
+      </div>
       {/* DeepSeek 风格：大圆角输入框 + 右下角内嵌按钮 */}
       <div className="relative">
         <textarea
@@ -54,17 +70,17 @@ export function ChatInput({ selectedText, onSend, streaming, onStop }: ChatInput
           rows={2}
           className="w-full px-4 py-3 pr-12 text-xs border border-gray-300 dark:border-gray-600 rounded-2xl bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-shadow"
         />
-        {/* 发送 / 停止按钮（内嵌右下角） */}
+        {/* 发送 / 停止按钮（内嵌右下角，蓝色主题） */}
         <button
           onClick={streaming ? onStop : handleSend}
           disabled={!streaming && !input.trim()}
           className={`
             absolute right-2 bottom-2 w-8 h-8 flex items-center justify-center transition-colors
             ${streaming
-              ? 'bg-gray-200 text-gray-600 hover:bg-red-500 hover:text-white rounded-md'
+              ? 'bg-blue-500 text-white hover:bg-red-500 rounded-md'
               : 'bg-blue-500 text-white hover:bg-blue-600 rounded-full'
             }
-            ${!streaming && !input.trim() ? 'bg-gray-200 text-gray-400 cursor-not-allowed hover:bg-gray-200' : ''}
+            ${!streaming && !input.trim() ? 'bg-blue-200 text-blue-400 cursor-not-allowed hover:bg-blue-200' : ''}
           `}
           title={streaming ? '停止生成' : '发送'}
         >
