@@ -8,10 +8,10 @@ interface ChatBubbleProps {
   convId: string
   onCopy: (nodeId: string) => void
   onRegenerate: (nodeId: string) => void
+  onEditStart: (nodeId: string) => void
   onEdit: (nodeId: string, newText: string) => void
   onEditCancel: () => void
   editing: boolean
-  initialEditText?: string
 }
 
 const BTN_BASE = 'px-1.5 py-0.5 text-[10px] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
@@ -23,13 +23,13 @@ export function ChatBubble({
   convId,
   onCopy,
   onRegenerate,
+  onEditStart,
   onEdit,
   onEditCancel,
   editing,
-  initialEditText,
 }: ChatBubbleProps) {
   const isUser = node.role === 'user'
-  const [editText, setEditText] = useState(initialEditText ?? node.content)
+  const [editText, setEditText] = useState(node.content)
   const [copied, setCopied] = useState(false)
   const [thinkingOpen, setThinkingOpen] = useState(false)
   const copyTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -44,6 +44,11 @@ export function ChatBubble({
       setThinkingOpen(false)
     }
   }, [convId])
+
+  // 进入编辑态时用当前节点内容初始化文本框
+  useEffect(() => {
+    if (editing) setEditText(node.content)
+  }, [editing, node.content])
 
   // 思考块折叠控制：
   // - 默认全部折叠
@@ -130,8 +135,11 @@ export function ChatBubble({
             <div className="mb-1.5 rounded bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => {
-                  setThinkingOpen(!thinkingOpen)
-                  if (!thinkingOpen) userExpandedRef.current = true
+                  const next = !thinkingOpen
+                  setThinkingOpen(next)
+                  // B17: collapsing must reset the flag — otherwise the next
+                  // reasoning chunk force-reopens the block mid-stream
+                  userExpandedRef.current = next
                 }}
                 className="w-full px-2 py-1 text-left text-[10px] text-gray-500 dark:text-gray-400 transition-colors"
               >
@@ -164,7 +172,7 @@ export function ChatBubble({
           {isUser ? (
             <>
               <button
-                onClick={() => onEdit(node.id, node.content)}
+                onClick={() => onEditStart(node.id)}
                 disabled={loading}
                 className={`${BTN_BASE} text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30`}
                 title="编辑"

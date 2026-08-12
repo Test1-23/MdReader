@@ -55,6 +55,8 @@ export function addUserNode(
   parentId?: string
 ): Conversation {
   const parent = parentId || conv.activeNodeId || conv.rootId
+  // B20c: an explicit parent that isn't in the tree would create an unreachable node
+  if (parent && !conv.nodes[parent]) return conv
   const node: ChatNode = {
     id: nodeId(),
     role: 'user',
@@ -86,6 +88,14 @@ export function addUserNode(
 export function addAssistantNode(conv: Conversation, content: string, parentId?: string): Conversation {
   const parent = parentId || conv.activeNodeId
   if (!parent) return conv
+  // B20c: explicit parent must exist in the tree
+  if (!conv.nodes[parent]) return conv
+  // B19g: one assistant reply per user node — a second one would become an
+  // unreachable orphan (all append/replace helpers target the first child)
+  if (getAssistantReply(conv, parent)) {
+    console.warn('[conversationTree] addAssistantNode: parent already has a reply — ignoring')
+    return conv
+  }
 
   const node: ChatNode = {
     id: nodeId(),
@@ -121,8 +131,11 @@ export function switchBranch(conv: Conversation, nodeId: string): Conversation {
 export function getPath(conv: Conversation, nodeId: string | null): ChatNode[] {
   if (!nodeId || !conv.nodes[nodeId]) return []
   const path: ChatNode[] = []
+  // B20d: a corrupted parentId chain (e.g. hand-edited save file) must not loop forever
+  const visited = new Set<string>()
   let current: string | null = nodeId
-  while (current) {
+  while (current && !visited.has(current)) {
+    visited.add(current)
     const node: ChatNode | undefined = conv.nodes[current]
     if (!node) break
     path.unshift(node)
@@ -163,24 +176,33 @@ export function replaceNodeContent(conv: Conversation, nodeId: string, newConten
 export function replaceAssistantReply(conv: Conversation, userNodeId: string, newContent: string): Conversation {
   const reply = getAssistantReply(conv, userNodeId)
   if (!reply) return conv
-  const nodes = { ...conv.nodes, [reply.id]: { ...reply, content: newContent, reasoning: '' } }
+  // B20f: reasoning is cleared, so the duration of the old thinking must go too
+  const nodes = { ...conv.nodes, [reply.id]: { ...reply, content: newContent, reasoning: '', reasoningDuration: undefined } }
   return { ...conv, nodes, activeNodeId: reply.id, updatedAt: Date.now() }
+}
+
+// E16: 增量追加到 AI 回复节点的某个字段（content / reasoning，流式显示）
+export function appendAssistantField(
+  conv: Conversation,
+  userNodeId: string,
+  field: 'content' | 'reasoning',
+  delta: string
+): Conversation {
+  const reply = getAssistantReply(conv, userNodeId)
+  if (!reply) return conv
+  const base = field === 'reasoning' ? (reply.reasoning ?? '') : reply.content
+  const nodes = { ...conv.nodes, [reply.id]: { ...reply, [field]: base + delta } }
+  return { ...conv, nodes, updatedAt: Date.now() }
 }
 
 // 增量追加到 AI 回复节点（流式显示）
 export function appendAssistantContent(conv: Conversation, userNodeId: string, delta: string): Conversation {
-  const reply = getAssistantReply(conv, userNodeId)
-  if (!reply) return conv
-  const nodes = { ...conv.nodes, [reply.id]: { ...reply, content: reply.content + delta } }
-  return { ...conv, nodes, updatedAt: Date.now() }
+  return appendAssistantField(conv, userNodeId, 'content', delta)
 }
 
 // 增量追加深度思考内容（流式显示 reasoning_content）
 export function appendAssistantReasoning(conv: Conversation, userNodeId: string, delta: string): Conversation {
-  const reply = getAssistantReply(conv, userNodeId)
-  if (!reply) return conv
-  const nodes = { ...conv.nodes, [reply.id]: { ...reply, reasoning: (reply.reasoning ?? '') + delta } }
-  return { ...conv, nodes, updatedAt: Date.now() }
+  return appendAssistantField(conv, userNodeId, 'reasoning', delta)
 }
 
 // ---- Tree View Helpers ----
@@ -220,6 +242,16 @@ export function getUserChildren(conv: Conversation, userNodeId: string): ChatNod
 
 // ---- Build Messages for API ----
 
+// B14: cap the injected document so a multi-MB file cannot blow the context
+// window or the token bill. Keep head + tail so the structure stays visible.
+const MAX_DOCUMENT_CONTEXT_CHARS = 24000
+
+function truncateDocument(content: string): string {
+  if (content.length <= MAX_DOCUMENT_CONTEXT_CHARS) return content
+  const half = Math.floor(MAX_DOCUMENT_CONTEXT_CHARS / 2)
+  return `${content.slice(0, half)}\n\n... (document truncated for context limits) ...\n\n${content.slice(-half)}`
+}
+
 export function buildMessages(
   conv: Conversation,
   nodeId: string,
@@ -235,12 +267,14 @@ export function buildMessages(
     'You are a helpful assistant. The user is reading a Markdown document and has selected some text for context. Answer concisely.',
   ]
   if (documentContent) {
-    sysParts.push(`\n\nThe document the user is reading:\n<document>\n${documentContent}\n</document>`)
+    sysParts.push(`\n\nThe document the user is reading:\n<document>\n${truncateDocument(documentContent)}\n</document>`)
   }
   messages.push({ role: 'system', content: sysParts.join('') })
 
-  // History from the path (excluding root node if it's the first user message with selected text)
-  for (const node of path) {
+  // B3: history excludes the last path node — getPath includes nodeId itself,
+  // and the current user message is re-sent below with its quoted selection.
+  // Sending it here too would duplicate the turn (double tokens, degraded output).
+  for (const node of path.slice(0, -1)) {
     if (node.role === 'system') continue
     messages.push({ role: node.role, content: node.content })
   }
@@ -256,4 +290,39 @@ export function buildMessages(
   messages.push({ role: 'user', content: userContent })
 
   return messages
+}
+
+// ---- Validation / Repair (R6) ----
+
+// Repair a conversation loaded from disk: drop unreachable orphan nodes, prune
+// dangling childrenIds, and restore a valid rootId / activeNodeId.
+export function normalizeConversation(conv: Conversation): Conversation {
+  const reachable = new Set<string>()
+  const stack: string[] = conv.rootId && conv.nodes[conv.rootId] ? [conv.rootId] : []
+  while (stack.length) {
+    const id = stack.pop()!
+    if (reachable.has(id)) continue
+    reachable.add(id)
+    const node = conv.nodes[id]
+    if (!node) continue
+    for (const childId of node.childrenIds) {
+      if (conv.nodes[childId]) stack.push(childId)
+    }
+  }
+
+  const nodes: Record<string, ChatNode> = {}
+  for (const id of reachable) nodes[id] = conv.nodes[id]
+
+  // Prune childrenIds pointing at missing nodes
+  for (const node of Object.values(nodes)) {
+    const filtered = node.childrenIds.filter((cid) => nodes[cid])
+    if (filtered.length !== node.childrenIds.length) {
+      nodes[node.id] = { ...node, childrenIds: filtered }
+    }
+  }
+
+  const rootId = conv.rootId && nodes[conv.rootId] ? conv.rootId : (Object.keys(nodes)[0] ?? null)
+  const activeNodeId = conv.activeNodeId && nodes[conv.activeNodeId] ? conv.activeNodeId : rootId
+
+  return { ...conv, nodes, rootId, activeNodeId }
 }

@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import type { Conversation, ChatNode } from '../../utils/conversationTree'
 import { getActivePath } from '../../utils/conversationTree'
 import { ChatBubble } from './ChatBubble'
+import { EmptyChat } from './EmptyChat'
 
 interface ChatViewProps {
   conv: Conversation
@@ -43,6 +44,8 @@ export const ChatView = memo(function ChatView({ conv, activeNodeId, loading, on
     }
   }, [conv])
 
+  // B4: the edit button enters edit mode — handleEditConfirm only fires when
+  // the user submits the edited text.
   const handleEditStart = (nodeId: string) => {
     setEditingId(nodeId)
   }
@@ -58,11 +61,7 @@ export const ChatView = memo(function ChatView({ conv, activeNodeId, loading, on
 
   return (
     <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-2">
-      {activePath.length === 0 && (
-        <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-600">
-          No messages yet. Select text in the document to start.
-        </div>
-      )}
+      {activePath.length === 0 && <EmptyChat />}
       {activePath.map((node) => (
         <div key={node.id}>
           <ChatBubble
@@ -72,6 +71,7 @@ export const ChatView = memo(function ChatView({ conv, activeNodeId, loading, on
             convId={conv.id}
             onCopy={onCopy}
             onRegenerate={onRegenerate}
+            onEditStart={handleEditStart}
             onEdit={handleEditConfirm}
             onEditCancel={handleEditCancel}
             editing={editingId === node.id}

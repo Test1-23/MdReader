@@ -10,6 +10,8 @@ import {
 } from '../utils/layout'
 import { execute } from '../services/layoutService'
 import type { LayoutResult } from '../services/layoutService'
+import { createConversation, normalizeConversation } from '../utils/conversationTree'
+import type { Conversation } from '../utils/conversationTree'
 
 // ============================================================
 // 双 Context 架构：
@@ -173,8 +175,15 @@ function uiReducer(state: UIState, action: UIAction): UIState {
       if (state.selectedText === action.payload.text) return state
       return { ...state, selectedText: action.payload.text }
     }
-    case 'SET_AI_CONVERSATION':
-      return { ...state, aiConversation: action.payload }
+    case 'SET_AI_CONVERSATION': {
+      const payload = action.payload
+      if (typeof payload === 'function') {
+        // R1/B2: 函数式更新 — useAiStream 依赖它做原子追加与会话 id 守卫
+        const prev = state.aiConversation ?? createConversation()
+        return { ...state, aiConversation: payload(prev) }
+      }
+      return { ...state, aiConversation: payload }
+    }
     case 'SET_CONVERSATION_LIST':
       return { ...state, conversationList: action.payload }
     default:
@@ -219,8 +228,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (list.length > 0) {
           const last = list[0]
           window.electronAPI!.loadConversation(last.id).then((data) => {
-            if (data && typeof data === 'object' && 'nodes' in data) {
-              uiDispatch({ type: 'SET_AI_CONVERSATION', payload: data as any })
+            if (data && typeof data === 'object' && 'nodes' in data && 'rootId' in data && 'id' in data) {
+              // R6: 启动恢复同样走规范化，损坏数据不会破坏聊天 UI
+              uiDispatch({ type: 'SET_AI_CONVERSATION', payload: normalizeConversation(data as Conversation) })
               uiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
             }
           }).catch(() => {})

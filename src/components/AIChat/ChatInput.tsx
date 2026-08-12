@@ -2,7 +2,9 @@ import { useState, useRef, useEffect } from 'react'
 
 interface ChatInputProps {
   selectedText: string | null
-  onSend: (message: string) => void
+  // B16: thinking flag rides along with the message so the panel can pass it
+  // through to the main process (chat_template_kwargs for DeepSeek-style models)
+  onSend: (message: string, thinking: boolean) => void
   streaming: boolean
   onStop: () => void
 }
@@ -24,7 +26,7 @@ export function ChatInput({ selectedText, onSend, streaming, onStop }: ChatInput
   const handleSend = () => {
     const trimmed = input.trim()
     if (!trimmed || streaming) return
-    onSend(trimmed)
+    onSend(trimmed, deepThink)
     setInput('')
   }
 

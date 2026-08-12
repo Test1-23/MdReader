@@ -76,3 +76,21 @@ export async function readDroppedFile(
 export function generateTabId(): string {
   return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
+
+// E6: shared "read a path and build the OpenFile payload" flow
+// (FileTreePanel / EditorGroup / EmptyState all do this inline today).
+export async function openFileByPath(filePath: string, readFile: ReadFileFn): Promise<OpenFile> {
+  const result = await readFile(filePath)
+  const fileName = getFileName(filePath)
+  const fileId = generateFileId(filePath)
+  const headings = extractHeadings(result.content)
+  return {
+    fileId,
+    filePath,
+    fileName,
+    content: result.content,
+    fileSize: result.size,
+    lastModified: result.lastModified,
+    headings,
+  }
+}

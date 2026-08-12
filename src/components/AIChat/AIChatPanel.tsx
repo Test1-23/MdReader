@@ -1,11 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useLayoutContext, useUIContext } from '../../context/AppContext'
 import {
-  createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages,
-  getAssistantReply, replaceNodeContent, replaceAssistantReply, appendAssistantContent,
-  appendAssistantReasoning,
+  createConversation, addUserNode, addAssistantNode, switchBranch, getAssistantReply,
+  replaceNodeContent, replaceAssistantReply,
 } from '../../utils/conversationTree'
+import type { Conversation } from '../../utils/conversationTree'
 import { findGroupContainingTab } from '../../utils/layout'
+import { useAiStream } from '../../hooks/useAiStream'
+import type { ConvUpdater } from '../../hooks/useAiStream'
+import { useDebouncedPersist } from '../../hooks/useDebouncedPersist'
+import { persistConversation, loadValidatedConversation } from './conversationPersistence'
 import { ChatView } from './ChatView'
 import { ChatTreeView } from './ChatTreeView'
 import { ChatInput } from './ChatInput'
@@ -17,14 +21,13 @@ interface AIChatPanelProps {
   tabId: string // 本窗口在布局树中的 tab id（用于关闭）
 }
 
+const CONFIG_HINT = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
+
 export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const { state: uiState, dispatch: uiDispatch } = useUIContext()
   const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
-  const [streaming, setStreaming] = useState(false)
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
-  const requestIdRef = useRef<string | null>(null)
-  const reasoningStartRef = useRef<number>(0)
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const deepThinkRef = useRef(false)
 
   const selectedText = uiState.selectedText
   const conv = uiState.aiConversation ?? createConversation()
@@ -36,8 +39,9 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     }
   }, [uiState.aiConversation, uiDispatch])
 
-  const setConv = useCallback((next: typeof conv) => {
-    uiDispatch({ type: 'SET_AI_CONVERSATION', payload: next })
+  // 函数式 setConv —— useAiStream 需要原子更新 + 会话 id 守卫（B2）
+  const setConv = useCallback((updater: ConvUpdater) => {
+    uiDispatch({ type: 'SET_AI_CONVERSATION', payload: updater })
   }, [uiDispatch])
 
   // ---- 当前文档全文（喂给 AI 的上下文）----
@@ -53,116 +57,58 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     docContentRef.current = file?.content
   }, [layoutState.layoutRoot, layoutState.activeTabId, layoutState.openFiles])
 
-  // ---- 流式请求封装：为该 user 节点发起流式生成，chunk 增量追加 ----
-  const streamAi = useCallback(async (currentConv: typeof conv, userNodeId: string): Promise<typeof conv> => {
-    const requestId = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-    requestIdRef.current = requestId
-    reasoningStartRef.current = 0
-    setStreaming(true)
+  // ---- 流式状态机（R1）：生命周期、竞态防护、chunk 批处理全部收敛于此 ----
+  const stream = useAiStream({
+    setConv,
+    getConfig: () => ({
+      endpoint: uiState.apiEndpoint,
+      model: uiState.apiModel,
+      thinking: deepThinkRef.current,
+    }),
+    getDocContent: () => docContentRef.current,
+    onStopped: (finalConv) => persistConversation(finalConv),
+  })
 
-    // 创建/复用空 assistant 节点（流式填充）
-    let working = currentConv
-    const existing = getAssistantReply(currentConv, userNodeId)
-    working = existing ? replaceAssistantReply(working, userNodeId, '') : addAssistantNode(working, '', userNodeId)
-    setConv(working)
-
-    const userNode = working.nodes[userNodeId]
-    const messages = buildMessages(working, userNodeId, userNode.content, userNode.selectedText, docContentRef.current)
-    // S1: 渲染层不再持有 apiKey —— 主进程从磁盘自行附加
-    const config = { endpoint: uiState.apiEndpoint, model: uiState.apiModel }
-
-    if (!window.electronAPI?.aiChatStream) {
-      // Dev fallback
-      working = appendAssistantContent(working, userNodeId, `[DEV MODE] AI not available. You asked: "${userNode.content.slice(0, 100)}"`)
-      setConv(working)
-      setStreaming(false)
-      requestIdRef.current = null
-      return working
-    }
-
-    await new Promise<void>((resolve) => {
-      const offChunk = window.electronAPI!.onAiChunk!(({ requestId: rid, delta }) => {
-        if (rid !== requestId) return
-        working = appendAssistantContent(working, userNodeId, delta)
-        setConv(working)
-      })
-      const offReasoning = window.electronAPI!.onAiReasoning!(({ requestId: rid, delta }) => {
-        if (rid !== requestId) return
-        if (!reasoningStartRef.current) reasoningStartRef.current = Date.now()
-        working = appendAssistantReasoning(working, userNodeId, delta)
-        setConv(working)
-      })
-      const offDone = window.electronAPI!.onAiDone!(({ requestId: rid }) => {
-        if (rid !== requestId) return
-        // 写入深度思考耗时
-        if (reasoningStartRef.current) {
-          const duration = Date.now() - reasoningStartRef.current
-          const reply = getAssistantReply(working, userNodeId)
-          if (reply) {
-            const nodes = { ...working.nodes, [reply.id]: { ...reply, reasoningDuration: duration } }
-            working = { ...working, nodes, updatedAt: Date.now() }
-            setConv(working)
-          }
-        }
-        offChunk(); offReasoning(); offDone(); offError()
-        resolve()
-      })
-      const offError = window.electronAPI!.onAiError!(({ requestId: rid, message }) => {
-        if (rid !== requestId) return
-        working = appendAssistantContent(working, userNodeId, `\n\nError: ${message}`)
-        setConv(working)
-        offChunk(); offReasoning(); offDone(); offError()
-        resolve()
-      })
-      window.electronAPI!.aiChatStream(requestId, messages as any, config)
-    })
-
-    setStreaming(false)
-    requestIdRef.current = null
-    return working
-  }, [setConv, uiState.apiEndpoint, uiState.apiModel])
-
-  // ---- 停止生成 ----
+  // ---- 停止生成（B1：取消事件会 resolve 流 Promise，UI 自动恢复）----
   const handleStop = useCallback(() => {
-    if (requestIdRef.current) {
-      window.electronAPI?.cancelAiStream(requestIdRef.current)
-      // Fix 6: 保存已生成的部分
-      if (conv.rootId && window.electronAPI?.saveConversation) {
-        window.electronAPI.saveConversation(conv.id, conv)
-      }
-      requestIdRef.current = null
-    }
-  }, [conv])
+    stream.stop()
+    // 部分内容经 onStopped 保存（cancelled 事件到达时）
+  }, [stream])
 
   // ---- 发送 ----
-  const handleSend = useCallback(async (message: string) => {
+  const handleSend = useCallback(async (message: string, thinking: boolean) => {
+    deepThinkRef.current = thinking
     // Always add the user node first — the message must be visible
     const updated = addUserNode(conv, message, selectedText || undefined)
     setConv(updated)
 
     // Missing API config → show a helpful message instead of silently failing
     if (!uiState.apiEndpoint || !uiState.apiKeySaved || !uiState.apiModel) {
-      const hint = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
-      setConv(addAssistantNode(updated, hint))
+      const reply = getAssistantReply(updated, updated.activeNodeId!)
+      setConv(reply
+        ? replaceAssistantReply(updated, updated.activeNodeId!, CONFIG_HINT)
+        : addAssistantNode(updated, CONFIG_HINT))
       return
     }
 
     try {
-      const withReply = await streamAi(updated, updated.activeNodeId!)
-      if (window.electronAPI?.saveConversation) {
-        window.electronAPI.saveConversation(withReply.id, withReply)
-      }
-    } catch (err: any) {
-      setConv(replaceAssistantReply(updated, updated.activeNodeId!, `Error: ${err.message || 'Unknown error'}`))
+      const withReply = await stream.start(updated, updated.activeNodeId!)
+      persistConversation(withReply)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setConv((prev) => replaceAssistantReply(prev, updated.activeNodeId!, `Error: ${msg}`))
     }
-  }, [conv, selectedText, uiState.apiEndpoint, uiState.apiKeySaved, uiState.apiModel, setConv, streamAi])
+  }, [conv, selectedText, uiState.apiEndpoint, uiState.apiKeySaved, uiState.apiModel, setConv, stream])
+
+  // ---- 分支切换（B2：流式期间先取消当前流）----
+  const debouncedSave = useDebouncedPersist()
 
   const handleSwitchBranch = useCallback((nodeId: string) => {
+    stream.stop()
     const next = switchBranch(conv, nodeId)
     setConv(next)
-    // Fix 5: 防抖保存分支切换（1s 内多次切换只保存最后一次）
     debouncedSave(next)
-  }, [conv, setConv])
+  }, [conv, setConv, debouncedSave, stream])
 
   // 树形图点击节点 → 回溯到该对的 AI 回复节点（若无回复则回到 user 节点），并切回聊天视图
   const handleSelectTreeNode = useCallback((nodeId: string) => {
@@ -191,14 +137,13 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     if (!userNodeId) return
 
     try {
-      const withReply = await streamAi(conv, userNodeId)
-      if (window.electronAPI?.saveConversation) {
-        window.electronAPI.saveConversation(withReply.id, withReply)
-      }
-    } catch (err: any) {
-      setConv(replaceAssistantReply(conv, userNodeId, `Error: ${err.message || 'Unknown error'}`))
+      const withReply = await stream.start(conv, userNodeId)
+      persistConversation(withReply)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setConv((prev) => replaceAssistantReply(prev, userNodeId, `Error: ${msg}`))
     }
-  }, [conv, setConv, streamAi])
+  }, [conv, setConv, stream])
 
   // ---- 编辑 + 重新发送 ----
   const handleEdit = useCallback(async (nodeId: string, newText: string) => {
@@ -206,102 +151,93 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     setConv(updated)
 
     if (!uiState.apiEndpoint || !uiState.apiKeySaved || !uiState.apiModel) {
-      const hint = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
-      setConv(addAssistantNode(updated, hint, nodeId))
+      const reply = getAssistantReply(updated, nodeId)
+      setConv(reply ? replaceAssistantReply(updated, nodeId, CONFIG_HINT) : addAssistantNode(updated, CONFIG_HINT, nodeId))
       return
     }
 
     try {
-      const withReply = await streamAi(updated, nodeId)
-      if (window.electronAPI?.saveConversation) {
-        window.electronAPI.saveConversation(withReply.id, withReply)
-      }
-    } catch (err: any) {
-      setConv(replaceAssistantReply(updated, nodeId, `Error: ${err.message || 'Unknown error'}`))
+      const withReply = await stream.start(updated, nodeId)
+      persistConversation(withReply)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setConv((prev) => replaceAssistantReply(prev, nodeId, `Error: ${msg}`))
     }
-  }, [conv, setConv, uiState.apiEndpoint, uiState.apiKeySaved, uiState.apiModel, streamAi])
+  }, [conv, setConv, uiState.apiEndpoint, uiState.apiKeySaved, uiState.apiModel, stream])
 
   // ---- 关闭窗口（回收 pane，对话保留在 context）----
   const handleClose = useCallback(() => {
     if (!layoutState.layoutRoot) return
-    // Fix 1: 关闭前保存当前对话
-    if (conv.rootId) window.electronAPI?.saveConversation?.(conv.id, conv)
+    if (conv.rootId) persistConversation(conv)
     const group = findGroupContainingTab(layoutState.layoutRoot, tabId)
     if (group) {
       layoutDispatch({ type: 'CLOSE_TAB', payload: { groupId: group.id, tabId } })
     }
   }, [layoutState.layoutRoot, tabId, layoutDispatch, conv])
 
-  // ---- 对话管理 ----
-  // 防抖保存（分支切换时 1s 内只保存一次）——不包装为 useCallback，避免声明顺序问题
-  const debouncedSave = (c: typeof conv) => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      window.electronAPI?.saveConversation?.(c.id, c)
-    }, 1000)
-  }
-
-  // 窗口关闭前保存当前对话（Fix 2: beforeunload）
+  // 窗口关闭前保存当前对话（P9: ref 读取最新值，流式期间不再每 chunk 重挂监听器）
+  const convRef = useRef<Conversation>(conv)
+  convRef.current = conv
   useEffect(() => {
     const save = () => {
-      if (conv.rootId && window.electronAPI?.saveConversation) {
-        window.electronAPI.saveConversation(conv.id, conv)
-      }
+      const c = convRef.current
+      if (c.rootId) persistConversation(c)
     }
     window.addEventListener('beforeunload', save)
-    return () => {
-      window.removeEventListener('beforeunload', save)
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    }
-  }, [conv])
+    return () => window.removeEventListener('beforeunload', save)
+  }, [])
 
   const refreshList = useCallback(() => {
     window.electronAPI?.listConversations()?.then((list) => {
       uiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
-    })
+    }).catch(() => {})
   }, [uiDispatch])
 
   const handleNewChat = useCallback(() => {
-    if (conv.rootId) window.electronAPI?.saveConversation?.(conv.id, conv) // 切换前保存当前对话
+    stream.stop()
+    if (conv.rootId) persistConversation(conv)
     setConv(createConversation())
     setViewMode('chat')
     refreshList()
-  }, [conv, setConv, refreshList])
+  }, [conv, setConv, refreshList, stream])
 
   const handleSelectConversation = useCallback(async (id: string) => {
-    if (conv.rootId && conv.id !== id) window.electronAPI?.saveConversation?.(conv.id, conv)
-    const data = await window.electronAPI?.loadConversation(id)
-    // 校验：确保关键字段存在（Fix 3）
-    if (data && typeof data === 'object' && 'nodes' in data && 'rootId' in data && 'id' in data) {
-      const d = data as typeof conv
-      // 规范化：activeNodeId 必须指向存在的节点
-      if (d.activeNodeId && !d.nodes[d.activeNodeId]) {
-        d.activeNodeId = d.rootId
-      }
-      setConv(d)
-    }
+    // B2: switching conversations mid-stream must not let stale chunks
+    // resurrect the old one — cancel first, the id guard covers the rest.
+    if (conv.id !== id) stream.stop()
+    if (conv.rootId && conv.id !== id) persistConversation(conv)
+    const data = await loadValidatedConversation(id)
+    if (data) setConv(data)
     setViewMode('chat')
     refreshList()
-  }, [conv, setConv, refreshList])
+  }, [conv, setConv, refreshList, stream])
 
   const handleRenameConversation = useCallback(async (id: string, title: string) => {
-    const data = await window.electronAPI?.loadConversation(id)
-    if (data && typeof data === 'object' && 'nodes' in data) {
-      const updated = { ...(data as typeof conv), title }
-      await window.electronAPI?.saveConversation(id, updated)
-      if (conv.id === id) setConv(updated)
+    // B15: renaming the current conversation must use the in-memory version —
+    // re-reading from disk would clobber unsaved messages with a stale snapshot.
+    if (conv.id === id) {
+      const updated = { ...conv, title }
+      setConv(updated)
+      persistConversation(updated)
+      refreshList()
+      return
+    }
+    const data = await loadValidatedConversation(id)
+    if (data) {
+      await window.electronAPI?.saveConversation(id, { ...data, title })
       refreshList()
     }
-  }, [conv.id, setConv, refreshList])
+  }, [conv, setConv, refreshList])
 
   const handleDeleteConversation = useCallback(async (id: string) => {
+    if (conv.id === id) stream.stop()
     await window.electronAPI?.deleteConversation(id)
     if (conv.id === id) {
       setConv(createConversation())
       setViewMode('chat')
     }
     refreshList()
-  }, [conv.id, setConv, refreshList])
+  }, [conv.id, setConv, refreshList, stream])
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900">
@@ -376,7 +312,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
         <ChatView
           conv={conv}
           activeNodeId={conv.activeNodeId}
-          loading={streaming}
+          loading={stream.streaming}
           onSwitchBranch={handleSwitchBranch}
           onCopy={handleCopy}
           onRegenerate={handleRegenerate}
@@ -394,7 +330,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
       <ChatInput
         selectedText={selectedText}
         onSend={handleSend}
-        streaming={streaming}
+        streaming={stream.streaming}
         onStop={handleStop}
       />
     </div>

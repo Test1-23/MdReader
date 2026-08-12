@@ -1,4 +1,5 @@
 // ---- File System Types ----
+import type { Conversation } from '../utils/conversationTree'
 
 export interface FileDirEntry {
   name: string
@@ -107,7 +108,7 @@ export interface UIState {
 
   // AI Chat
   selectedText: string | null
-  aiConversation: import('../utils/conversationTree').Conversation | null
+  aiConversation: Conversation | null
   conversationList: Array<{ id: string; title: string; updatedAt: number }>
 }
 
@@ -147,7 +148,8 @@ export type UIAction =
   | { type: 'TOGGLE_DARK_MODE' }
   | { type: 'SETTINGS_UPDATE'; payload: { endpoint: string; model: string; hasKey: boolean } }
   | { type: 'SET_SELECTION'; payload: { text: string | null } }
-  | { type: 'SET_AI_CONVERSATION'; payload: import('../utils/conversationTree').Conversation | null }
+  // 函数式更新（R1/B2）：payload 可以是 Conversation 或 updater 函数
+  | { type: 'SET_AI_CONVERSATION'; payload: Conversation | ((prev: Conversation) => Conversation) | null }
   | { type: 'SET_CONVERSATION_LIST'; payload: Array<{ id: string; title: string; updatedAt: number }> }
 
 // ---- Layout Helper ----

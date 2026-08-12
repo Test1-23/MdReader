@@ -3,6 +3,7 @@ import type { Conversation } from '../../utils/conversationTree'
 import { getActivePath } from '../../utils/conversationTree'
 import { computeTreeLayout, NODE_RADIUS } from '../../utils/treeLayout'
 import type { TreeLayoutNode } from '../../utils/treeLayout'
+import { EmptyChat } from './EmptyChat'
 
 interface ChatTreeViewProps {
   conv: Conversation
@@ -118,8 +119,8 @@ export const ChatTreeView = memo(function ChatTreeView({ conv, activeNodeId, onS
 
   if (layout.nodes.length === 0) {
     return (
-      <div className="flex-1 overflow-y-auto px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-600">
-        No conversation yet. Select text in the document to start.
+      <div className="flex-1 overflow-y-auto">
+        <EmptyChat />
       </div>
     )
   }
