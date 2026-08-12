@@ -10,7 +10,7 @@ import { GroupContent } from './GroupContent'
 type DropZone = SplitPosition | 'center' | null
 
 const TAB_BAR_HEIGHT = 36
-const EDGE_PCT = 20
+const EDGE_PCT = 10
 
 interface CachedRect {
   left: number

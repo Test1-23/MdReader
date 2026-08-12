@@ -12,13 +12,11 @@ import { ChatInput } from './ChatInput'
 type ChatViewMode = 'chat' | 'tree'
 
 const MIN_WIDTH = 240
-const MAX_WIDTH = 600
 const MIN_HEIGHT = 160
-const MAX_HEIGHT = 600
 
 function loadSavedSize(): number {
   const saved = parseInt(localStorage.getItem('mdreader-chat-width') || '', 10)
-  return saved >= MIN_WIDTH && saved <= MAX_WIDTH ? saved : 320
+  return saved >= MIN_WIDTH ? saved : 320
 }
 
 const positionClasses: Record<string, string> = {
@@ -34,6 +32,7 @@ export function AIChatPanel() {
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
   const [width, setWidth] = useState(loadSavedSize)
   const [height, setHeight] = useState(240)
+  const [dragging, setDragging] = useState(false)
   const dragRef = useRef<{ start: number; startSize: number; axis: 'x' | 'y' } | null>(null)
   const rafRef = useRef<number>()
 
@@ -44,6 +43,7 @@ export function AIChatPanel() {
   const startResize = useCallback((e: React.MouseEvent, axis: 'x' | 'y') => {
     e.preventDefault()
     e.stopPropagation()
+    setDragging(true)
     dragRef.current = {
       start: axis === 'x' ? e.clientX : e.clientY,
       startSize: axis === 'x' ? width : height,
@@ -56,9 +56,10 @@ export function AIChatPanel() {
       // - left/right 面板 handle 在面板内缘，向左拖（clientX 减小）应变宽
       // - bottom 面板 handle 在上缘，向上拖（clientY 减小）应变高
       const delta = a === 'x' ? -(ev.clientX - start) : -(ev.clientY - start)
+      // 无上限：只保下限（宽度受窗口 flex 布局自然约束）
       const size = a === 'x'
-        ? Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startSize + delta))
-        : Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, startSize + delta))
+        ? Math.max(MIN_WIDTH, startSize + delta)
+        : Math.max(MIN_HEIGHT, startSize + delta)
       dragRef.current.startSize = size
       // rAF 节流：每帧最多一次 setState（拖动时不再每 mousemove 全量重渲染）
       if (rafRef.current === undefined) {
@@ -72,6 +73,7 @@ export function AIChatPanel() {
     const onUp = () => {
       const final = dragRef.current?.startSize
       dragRef.current = null
+      setDragging(false)
       if (rafRef.current !== undefined) {
         cancelAnimationFrame(rafRef.current)
         rafRef.current = undefined
@@ -237,20 +239,23 @@ export function AIChatPanel() {
       className={`relative ${positionClasses[position]} bg-white dark:bg-gray-900 flex flex-col`}
       style={sizeStyle}
     >
-      {/* 拖拽调节 handle（VS Code 风格） */}
+      {/* 拖拽调节 handle（反馈改轻：默认透明，hover 淡灰，拖动中淡蓝细线） */}
       {isBottom ? (
         <div
           onMouseDown={(e) => startResize(e, 'y')}
-          className="absolute top-0 left-0 right-0 h-1 cursor-row-resize bg-gray-300 dark:bg-gray-700 hover:bg-blue-400 dark:hover:bg-blue-500 transition-colors"
+          className={`
+            absolute top-0 left-0 right-0 h-[3px] cursor-row-resize transition-colors
+            ${dragging ? 'bg-blue-400/60' : 'hover:bg-gray-400/40'}
+          `}
           title="拖拽调整高度"
         />
       ) : (
         <div
           onMouseDown={(e) => startResize(e, 'x')}
           className={`
-            absolute top-0 bottom-0 w-1 cursor-col-resize
-            bg-gray-300 dark:bg-gray-700 hover:bg-blue-400 dark:hover:bg-blue-500 transition-colors
-            ${position === 'right' ? '-left-0.5' : '-right-0.5'}
+            absolute top-0 bottom-0 w-[3px] -translate-x-1/2 cursor-col-resize transition-colors
+            ${dragging ? 'bg-blue-400/60' : 'hover:bg-gray-400/40'}
+            ${position === 'right' ? 'left-0' : 'right-0'}
           `}
           title="拖拽调整宽度"
         />
