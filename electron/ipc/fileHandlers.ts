@@ -7,6 +7,29 @@ import { assertTrustedSender } from './security'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // P7: reject files beyond 20MB with a clear error
 
+// B19f: decode with encoding detection — UTF-8 BOM / strict UTF-8 / UTF-16,
+// falling back to GBK for Chinese Windows files (Electron ships full ICU).
+function decodeBuffer(buf: Buffer): string {
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    return buf.toString('utf8', 3)
+  }
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return buf.toString('utf16le', 2)
+  }
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    return buf.swap16().toString('utf16le', 2)
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf)
+  } catch {
+    try {
+      return new TextDecoder('gbk').decode(buf)
+    } catch {
+      return buf.toString('utf8')
+    }
+  }
+}
+
 // S6: only paths the user explicitly opened (folder dialog / file dialog /
 // drag-drop) may be read. Dialog handlers auto-authorize; the renderer calls
 // file:authorizePath for drag-dropped files.
@@ -45,7 +68,7 @@ export function registerFileHandlers(ipcMain: IpcMain) {
       const handle = await open(filePath, 'r')
       try {
         const fstats = await handle.stat()
-        const content = await handle.readFile('utf-8')
+        const content = decodeBuffer(await handle.readFile())
         return {
           content,
           size: fstats.size,

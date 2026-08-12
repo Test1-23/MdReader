@@ -2,6 +2,7 @@ import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
 import { isEditorGroup, isSplitNode } from '../../types'
 import type { LayoutNode } from '../../types'
+import { useLayoutContext } from '../../context/AppContext'
 import { EditorGroup } from './EditorGroup'
 
 interface EditorGroupTreeProps {
@@ -9,17 +10,23 @@ interface EditorGroupTreeProps {
 }
 
 export function EditorGroupTree({ node }: EditorGroupTreeProps) {
+  const { dispatch } = useLayoutContext()
+
   if (isEditorGroup(node)) {
     return <EditorGroup group={node} />
   }
 
   if (isSplitNode(node)) {
-    // Allotment 非受控：defaultSizes 只在挂载时应用，拖动由 Allotment 内部管理，
-    // 不再通过 onChange 同步到全局 state（分屏拖动零 React 更新）
+    // D4/B19h: controlled Allotment — sizes are written back on change so the
+    // recalculated proportions after closing a pane actually take effect
+    // (with defaultSizes-only, closing a pane left stale pixel widths).
     return (
       <Allotment
         vertical={node.direction === 'vertical'}
-        defaultSizes={node.sizes}
+        sizes={node.sizes}
+        onChange={(sizes) => {
+          dispatch({ type: 'RESIZE_SPLIT', payload: { splitId: node.id, sizes } })
+        }}
       >
         {node.children.map((child) => (
           <Allotment.Pane key={child.id} minSize={150}>

@@ -133,6 +133,7 @@ export type LayoutAction =
   | { type: 'CLOSE_GROUP'; payload: { groupId: string } }
   | { type: 'MOVE_TAB'; payload: { tabId: string; fromGroupId: string; toGroupId: string; toIndex: number } }
   | { type: 'SET_ACTIVE_GROUP'; payload: { groupId: string } }
+  | { type: 'RESIZE_SPLIT'; payload: { splitId: string; sizes: number[] } }
 
   // View
   | { type: 'TOGGLE_VIEW_MODE'; payload: { tabId: string } }

@@ -7,6 +7,7 @@ import {
   transformNode,
   getFirstGroup,
   getActiveTab,
+  resizeSplit,
 } from '../utils/layout'
 import { execute } from '../services/layoutService'
 import type { LayoutResult } from '../services/layoutService'
@@ -131,6 +132,11 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       }
       const newLayout = transformNode(state.layoutRoot, group.id, () => updatedGroup)
       return { ...state, layoutRoot: newLayout }
+    }
+    case 'RESIZE_SPLIT': {
+      // D4: Allotment 受控化 — 拖动/关闭 pane 后的比例回写
+      if (!state.layoutRoot) return state
+      return { ...state, layoutRoot: resizeSplit(state.layoutRoot, action.payload.splitId, action.payload.sizes) }
     }
     default:
       return state

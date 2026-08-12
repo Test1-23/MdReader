@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useLayoutContext, useUIContext } from '../context/AppContext'
 import { useElectronAPI } from './useElectronAPI'
-import { readDroppedFile, generateTabId } from '../utils/fileReader'
+import { readDroppedMarkdownFiles, generateTabId } from '../utils/fileReader'
 
 export function useDragDrop() {
   const { dispatch: layoutDispatch } = useLayoutContext()
@@ -13,6 +13,11 @@ export function useDragDrop() {
     // 仅外部文件拖入（dataTransfer 含 Files）才显示全局 overlay —— 内部 tab/文件树拖拽不触发
     const isExternalFileDrag = (e: DragEvent): boolean => {
       return e.dataTransfer?.types?.includes('Files') ?? false
+    }
+
+    const resetCounter = () => {
+      dragCounter.current = 0
+      uiDispatch({ type: 'SET_DRAG_OVER', payload: false })
     }
 
     const handleDragEnter = (e: DragEvent) => {
@@ -31,8 +36,7 @@ export function useDragDrop() {
       if (!isExternalFileDrag(e)) return
       dragCounter.current--
       if (dragCounter.current <= 0) {
-        dragCounter.current = 0
-        uiDispatch({ type: 'SET_DRAG_OVER', payload: false })
+        resetCounter()
       }
     }
 
@@ -47,47 +51,47 @@ export function useDragDrop() {
 
       e.preventDefault()
       e.stopPropagation()
-      dragCounter.current = 0
-      uiDispatch({ type: 'SET_DRAG_OVER', payload: false })
+      resetCounter()
 
       const files = e.dataTransfer?.files
       if (!files || files.length === 0) return
 
-      const mdFiles = Array.from(files).filter((f) => {
-        const name = f.name.toLowerCase()
-        return name.endsWith('.md') || name.endsWith('.markdown') || name.endsWith('.mdown') || name.endsWith('.mkd') || name.endsWith('.txt')
-      })
+      const opened = await readDroppedMarkdownFiles(Array.from(files), readFile, isElectron)
 
-      if (mdFiles.length === 0) {
+      if (opened.length === 0) {
         uiDispatch({ type: 'SET_ERROR', payload: 'No markdown file found in the dropped items.' })
         return
       }
 
-      for (const file of mdFiles) {
-        try {
-          const openFile = await readDroppedFile(file, readFile, isElectron)
-          if (openFile) {
-            layoutDispatch({
-              type: 'OPEN_FILE',
-              payload: { ...openFile, tabId: generateTabId() },
-            })
-          }
-        } catch {
-          uiDispatch({ type: 'SET_ERROR', payload: 'Failed to read one of the dropped files.' })
-        }
+      for (const openFile of opened) {
+        layoutDispatch({
+          type: 'OPEN_FILE',
+          payload: { ...openFile, tabId: generateTabId() },
+        })
       }
     }
+
+    // B20h: EditorGroup stops propagation on its own drop, so the bubble-phase
+    // handler above never sees it — a capture-phase drop listener and a
+    // dragend listener keep the counter consistent (ESC cancel and abnormal
+    // drag exits land here too; without this the overlay can stick forever).
+    const handleDropCapture = () => resetCounter()
+    const handleDragEnd = () => resetCounter()
 
     window.addEventListener('dragenter', handleDragEnter)
     window.addEventListener('dragleave', handleDragLeave)
     window.addEventListener('dragover', handleDragOver)
     window.addEventListener('drop', handleDrop)
+    window.addEventListener('drop', handleDropCapture, true)
+    window.addEventListener('dragend', handleDragEnd)
 
     return () => {
       window.removeEventListener('dragenter', handleDragEnter)
       window.removeEventListener('dragleave', handleDragLeave)
       window.removeEventListener('dragover', handleDragOver)
       window.removeEventListener('drop', handleDrop)
+      window.removeEventListener('drop', handleDropCapture, true)
+      window.removeEventListener('dragend', handleDragEnd)
     }
   }, [layoutDispatch, uiDispatch, readFile, isElectron])
 }

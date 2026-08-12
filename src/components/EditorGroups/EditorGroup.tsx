@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLayoutContext, useUIContext } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
-import { readDroppedFile, generateTabId } from '../../utils/fileReader'
-import { getFileName, generateFileId, extractHeadings } from '../../utils/markdown'
+import { readDroppedMarkdownFiles, generateTabId, openFileByPath } from '../../utils/fileReader'
 import type { EditorGroup as EditorGroupType, SplitPosition } from '../../types'
 import { GroupTabs } from './GroupTabs'
 import { GroupContent } from './GroupContent'
@@ -127,40 +126,27 @@ export function EditorGroup({ group }: EditorGroupProps) {
 
     // --- Case 1: External file drop (files in dataTransfer) ---
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const mdFiles = Array.from(e.dataTransfer.files).filter((f) => {
-        const n = f.name.toLowerCase()
-        return n.endsWith('.md') || n.endsWith('.markdown') || n.endsWith('.mdown') || n.endsWith('.mkd') || n.endsWith('.txt')
-      })
-      if (mdFiles.length === 0) return
+      // E7: shared drop pipeline (filter → read → skip failures)
+      const opened = await readDroppedMarkdownFiles(Array.from(e.dataTransfer.files), readFile, isElectron)
+      if (opened.length === 0) return
 
       // Multi-file → open all in this group, no split regardless of zone
-      if (mdFiles.length > 1) {
-        for (const file of mdFiles) {
-          try {
-            const openFile = await readDroppedFile(file, readFile, isElectron)
-            if (openFile) {
-              layoutDispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
-            }
-          } catch { /* skip failed files */ }
+      if (opened.length > 1) {
+        for (const openFile of opened) {
+          layoutDispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
         }
         return
       }
 
       // Single file → existing behavior
-      try {
-        const openFile = await readDroppedFile(mdFiles[0], readFile, isElectron)
-        if (!openFile) return
-
-        if (!position) {
-          layoutDispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
-        } else {
-          layoutDispatch({
-            type: 'OPEN_FILE_AND_SPLIT',
-            payload: { file: openFile, tabId: generateTabId(), groupId: group.id, position },
-          })
-        }
-      } catch {
-        uiDispatch({ type: 'SET_ERROR', payload: 'Failed to read the dropped file.' })
+      const openFile = opened[0]
+      if (!position) {
+        layoutDispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
+      } else {
+        layoutDispatch({
+          type: 'OPEN_FILE_AND_SPLIT',
+          payload: { file: openFile, tabId: generateTabId(), groupId: group.id, position },
+        })
       }
       return
     }
@@ -169,15 +155,8 @@ export function EditorGroup({ group }: EditorGroupProps) {
     const filePath = e.dataTransfer.getData('text/file-path')
     if (filePath) {
       try {
-        const result = await readFile(filePath)
-        const fileName = getFileName(filePath)
-        const fileId = generateFileId(filePath)
-        const headings = extractHeadings(result.content)
-        const openFile = {
-          fileId, filePath, fileName,
-          content: result.content, fileSize: result.size,
-          lastModified: result.lastModified, headings,
-        }
+        // E6: shared path→OpenFile flow
+        const openFile = await openFileByPath(filePath, readFile)
         const tabId = generateTabId()
 
         if (!position) {
@@ -216,7 +195,8 @@ export function EditorGroup({ group }: EditorGroupProps) {
 
   return (
     <div
-      className={`h-full flex flex-col relative ${isActive ? '' : ''}`}
+      className="h-full flex flex-col relative"
+      data-active-group={isActive ? 'true' : 'false'}
       onClick={handleFocus}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}

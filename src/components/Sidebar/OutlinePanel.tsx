@@ -1,6 +1,6 @@
 import { useLayoutContext } from '../../context/AppContext'
 import { findGroupContainingTab } from '../../utils/layout'
-import type { Heading } from '../../types'
+import { headingToId } from '../../utils/markdown'
 
 export function OutlinePanel() {
   const { state } = useLayoutContext()
@@ -33,16 +33,14 @@ export function OutlinePanel() {
     )
   }
 
-  const headingToId = (text: string): string => {
-    return text
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^\w一-鿿-]/g, '')
-  }
-
   const handleClick = (headingText: string) => {
     const id = headingToId(headingText)
-    const headingEl = document.getElementById(id)
+    // B19i: the same file can be open in several groups — scope the lookup to
+    // the active group's content area instead of document-wide getElementById.
+    const activeArea = document.querySelector('[data-active-group="true"]')
+    const headingEl = activeArea
+      ? activeArea.querySelector(`#${CSS.escape(id)}`)
+      : document.getElementById(id)
     if (headingEl) {
       headingEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
@@ -54,7 +52,8 @@ export function OutlinePanel() {
         const id = headingToId(heading.text)
         return (
           <button
-            key={id}
+            // include the line number — duplicated headings share the same id
+            key={`${id}-${heading.line}`}
             onClick={() => handleClick(heading.text)}
             className="w-full text-left px-2 py-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-300 truncate block transition-colors"
             style={{ paddingLeft: `${8 + (heading.level - 1) * 16}px` }}

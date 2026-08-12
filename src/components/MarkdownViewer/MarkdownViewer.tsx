@@ -2,12 +2,16 @@ import React, { useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useLayoutContext, useUIContext } from '../../context/AppContext'
+import { headingToId } from '../../utils/markdown'
 
 interface MarkdownViewerProps {
   content: string
 }
+
+// Stable identity across renders — an inline array would defeat memoization
+const REMARK_PLUGINS = [remarkGfm]
 
 // ---- Module-level renderers (stable identity, no closure re-creation) ----
 
@@ -20,14 +24,13 @@ function extractText(node: unknown): string {
   return ''
 }
 
+// E3: same id algorithm as OutlinePanel navigation
 function headingId(children: unknown): string {
-  return extractText(children)
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^\w一-鿿-]/g, '')
+  return headingToId(extractText(children))
 }
 
 function CodeRenderer({ className, children, ...props }: any) {
+  const { state: uiState } = useUIContext()
   const match = /language-(\w+)/.exec(className || '')
   const codeText = extractText(children)
   const isInline = !match && !codeText.includes('\n')
@@ -42,7 +45,8 @@ function CodeRenderer({ className, children, ...props }: any) {
 
   return (
     <SyntaxHighlighter
-      style={oneLight}
+      // B20j: match the code block theme to the app theme
+      style={uiState.darkMode ? oneDark : oneLight}
       language={match ? match[1] : 'text'}
       PreTag="div"
       customStyle={{
@@ -150,7 +154,7 @@ export function MarkdownViewer({ content }: MarkdownViewerProps) {
       onMouseUp={handleMouseUp}
     >
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={REMARK_PLUGINS}
         components={COMPONENTS}
       >
         {content}
