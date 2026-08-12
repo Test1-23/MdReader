@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
-import { useLayoutContext } from '../context/AppContext'
+import { useLayoutDispatch } from '../context/AppContext'
 import { generateFileId, extractHeadings } from '../utils/markdown'
+import { generateTabId } from '../utils/fileReader'
 import type { OpenFile } from '../types'
 
 export function usePasteHandler() {
-  const { dispatch } = useLayoutContext()
+  const dispatch = useLayoutDispatch()
 
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
@@ -37,7 +38,7 @@ export function usePasteHandler() {
         headings,
       }
 
-      dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` } })
+      dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId() } })
     }
 
     window.addEventListener('paste', handlePaste)

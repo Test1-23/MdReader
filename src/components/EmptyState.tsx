@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { useLayoutContext } from '../context/AppContext'
+import { useLayoutDispatch } from '../context/AppContext'
 import { useElectronAPI } from '../hooks/useElectronAPI'
 import { openFileByPath, generateTabId } from '../utils/fileReader'
 
 export function EmptyState() {
-  const { dispatch } = useLayoutContext()
+  const dispatch = useLayoutDispatch()
   const { readFile, isElectron } = useElectronAPI()
   const [tip, setTip] = useState<string | null>(null)
   const [opening, setOpening] = useState(false)

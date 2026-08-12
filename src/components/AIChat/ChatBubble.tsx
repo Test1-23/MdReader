@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, memo } from 'react'
 import type { ChatNode } from '../../utils/conversationTree'
 
 interface ChatBubbleProps {
@@ -16,7 +16,9 @@ interface ChatBubbleProps {
 
 const BTN_BASE = 'px-1.5 py-0.5 text-[10px] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
 
-export function ChatBubble({
+// memo: handlers are ref-stable (AIChatPanel), and untouched nodes keep their
+// reference — only the streaming bubble re-renders per chunk
+export const ChatBubble = memo(function ChatBubble({
   node,
   isActive,
   loading,
@@ -202,4 +204,4 @@ export function ChatBubble({
       </div>
     </div>
   )
-}
+})

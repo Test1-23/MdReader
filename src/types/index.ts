@@ -112,6 +112,15 @@ export interface UIState {
   conversationList: Array<{ id: string; title: string; updatedAt: number }>
 }
 
+// R2: AI 状态切片 — 独立 Context，聊天每 token 更新不再触达布局/UI 消费者
+export interface AIChatState {
+  selectedText: string | null
+  aiConversation: Conversation | null
+  conversationList: Array<{ id: string; title: string; updatedAt: number }>
+}
+
+export type UIStateView = Omit<UIState, 'selectedText' | 'aiConversation' | 'conversationList'>
+
 // ---- App Actions ----
 
 export type LayoutAction =

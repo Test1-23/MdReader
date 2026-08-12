@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useUIContext } from '../../context/AppContext'
+import { useAIContext } from '../../context/AppContext'
 import type { Conversation } from '../../utils/conversationTree'
 
 interface ConversationListProps {
@@ -11,7 +11,7 @@ interface ConversationListProps {
 }
 
 export function ConversationList({ conv, onSelect, onRename, onDelete, onNew }: ConversationListProps) {
-  const { state } = useUIContext()
+  const { state } = useAIContext()
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameText, setRenameText] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)

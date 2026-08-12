@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useLayoutContext, useUIContext } from '../../context/AppContext'
+import { useLayoutContext, useUIContext, useAIContext } from '../../context/AppContext'
 import {
   createConversation, addUserNode, addAssistantNode, switchBranch, getAssistantReply,
   replaceNodeContent, replaceAssistantReply,
@@ -25,24 +25,25 @@ const CONFIG_HINT = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设�
 
 export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const { state: uiState, dispatch: uiDispatch } = useUIContext()
+  const { state: aiState, dispatch: aiDispatch } = useAIContext()
   const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
   const deepThinkRef = useRef(false)
 
-  const selectedText = uiState.selectedText
-  const conv = uiState.aiConversation ?? createConversation()
+  const selectedText = aiState.selectedText
+  const conv = aiState.aiConversation ?? createConversation()
 
   // Fix 1b: 首次挂载若无对话，创建并写回 context（保证 id 稳定，不再每次渲染生成临时对话）
   useEffect(() => {
-    if (!uiState.aiConversation) {
-      uiDispatch({ type: 'SET_AI_CONVERSATION', payload: createConversation() })
+    if (!aiState.aiConversation) {
+      aiDispatch({ type: 'SET_AI_CONVERSATION', payload: createConversation() })
     }
-  }, [uiState.aiConversation, uiDispatch])
+  }, [aiState.aiConversation, aiDispatch])
 
   // 函数式 setConv —— useAiStream 需要原子更新 + 会话 id 守卫（B2）
   const setConv = useCallback((updater: ConvUpdater) => {
-    uiDispatch({ type: 'SET_AI_CONVERSATION', payload: updater })
-  }, [uiDispatch])
+    aiDispatch({ type: 'SET_AI_CONVERSATION', payload: updater })
+  }, [aiDispatch])
 
   // ---- 当前文档全文（喂给 AI 的上下文）----
   const docContentRef = useRef<string | undefined>(undefined)
@@ -69,6 +70,15 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     onStopped: (finalConv) => persistConversation(finalConv),
   })
 
+  // ---- handler 稳定化（配合 ChatView/ChatBubble memo）——
+  // 全部经 ref 读取最新值，依赖数组为空，身份跨渲染恒定
+  const convRef = useRef<Conversation>(conv)
+  convRef.current = conv
+  const selectedTextRef = useRef(selectedText)
+  selectedTextRef.current = selectedText
+  const uiSettingsRef = useRef({ endpoint: uiState.apiEndpoint, keySaved: uiState.apiKeySaved, model: uiState.apiModel })
+  uiSettingsRef.current = { endpoint: uiState.apiEndpoint, keySaved: uiState.apiKeySaved, model: uiState.apiModel }
+
   // ---- 停止生成（B1：取消事件会 resolve 流 Promise，UI 自动恢复）----
   const handleStop = useCallback(() => {
     stream.stop()
@@ -78,12 +88,14 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   // ---- 发送 ----
   const handleSend = useCallback(async (message: string, thinking: boolean) => {
     deepThinkRef.current = thinking
+    const current = convRef.current
+    const settings = uiSettingsRef.current
     // Always add the user node first — the message must be visible
-    const updated = addUserNode(conv, message, selectedText || undefined)
+    const updated = addUserNode(current, message, selectedTextRef.current || undefined)
     setConv(updated)
 
     // Missing API config → show a helpful message instead of silently failing
-    if (!uiState.apiEndpoint || !uiState.apiKeySaved || !uiState.apiModel) {
+    if (!settings.endpoint || !settings.keySaved || !settings.model) {
       const reply = getAssistantReply(updated, updated.activeNodeId!)
       setConv(reply
         ? replaceAssistantReply(updated, updated.activeNodeId!, CONFIG_HINT)
@@ -98,59 +110,62 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       setConv((prev) => replaceAssistantReply(prev, updated.activeNodeId!, `Error: ${msg}`))
     }
-  }, [conv, selectedText, uiState.apiEndpoint, uiState.apiKeySaved, uiState.apiModel, setConv, stream])
+  }, [setConv, stream])
 
   // ---- 分支切换（B2：流式期间先取消当前流）----
   const debouncedSave = useDebouncedPersist()
 
   const handleSwitchBranch = useCallback((nodeId: string) => {
     stream.stop()
-    const next = switchBranch(conv, nodeId)
+    const next = switchBranch(convRef.current, nodeId)
     setConv(next)
     debouncedSave(next)
-  }, [conv, setConv, debouncedSave, stream])
+  }, [setConv, debouncedSave, stream])
 
   // 树形图点击节点 → 回溯到该对的 AI 回复节点（若无回复则回到 user 节点），并切回聊天视图
   const handleSelectTreeNode = useCallback((nodeId: string) => {
-    const reply = getAssistantReply(conv, nodeId)
-    setConv(switchBranch(conv, reply ? reply.id : nodeId))
+    const current = convRef.current
+    const reply = getAssistantReply(current, nodeId)
+    setConv(switchBranch(current, reply ? reply.id : nodeId))
     setViewMode('chat')
-  }, [conv, setConv])
+  }, [setConv])
 
   const handleCopy = useCallback(async (nodeId: string) => {
-    const node = conv.nodes[nodeId]
+    const node = convRef.current.nodes[nodeId]
     if (!node) return
     try {
       await navigator.clipboard.writeText(node.content)
     } catch {
       console.warn('Copy failed')
     }
-  }, [conv])
+  }, [])
 
   // ---- 重发 / 重新生成 ----
   const handleRegenerate = useCallback(async (nodeId: string) => {
-    const node = conv.nodes[nodeId]
+    const current = convRef.current
+    const node = current.nodes[nodeId]
     if (!node) return
     const userNodeId = node.role === 'user'
       ? node.id
-      : (node.parentId && conv.nodes[node.parentId]?.role === 'user' ? node.parentId : null)
+      : (node.parentId && current.nodes[node.parentId]?.role === 'user' ? node.parentId : null)
     if (!userNodeId) return
 
     try {
-      const withReply = await stream.start(conv, userNodeId)
+      const withReply = await stream.start(current, userNodeId)
       persistConversation(withReply)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       setConv((prev) => replaceAssistantReply(prev, userNodeId, `Error: ${msg}`))
     }
-  }, [conv, setConv, stream])
+  }, [setConv, stream])
 
   // ---- 编辑 + 重新发送 ----
   const handleEdit = useCallback(async (nodeId: string, newText: string) => {
-    const updated = replaceNodeContent(conv, nodeId, newText)
+    const settings = uiSettingsRef.current
+    const updated = replaceNodeContent(convRef.current, nodeId, newText)
     setConv(updated)
 
-    if (!uiState.apiEndpoint || !uiState.apiKeySaved || !uiState.apiModel) {
+    if (!settings.endpoint || !settings.keySaved || !settings.model) {
       const reply = getAssistantReply(updated, nodeId)
       setConv(reply ? replaceAssistantReply(updated, nodeId, CONFIG_HINT) : addAssistantNode(updated, CONFIG_HINT, nodeId))
       return
@@ -163,7 +178,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       setConv((prev) => replaceAssistantReply(prev, nodeId, `Error: ${msg}`))
     }
-  }, [conv, setConv, uiState.apiEndpoint, uiState.apiKeySaved, uiState.apiModel, stream])
+  }, [setConv, stream])
 
   // ---- 关闭窗口（回收 pane，对话保留在 context）----
   const handleClose = useCallback(() => {
@@ -176,8 +191,6 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   }, [layoutState.layoutRoot, tabId, layoutDispatch, conv])
 
   // 窗口关闭前保存当前对话（P9: ref 读取最新值，流式期间不再每 chunk 重挂监听器）
-  const convRef = useRef<Conversation>(conv)
-  convRef.current = conv
   useEffect(() => {
     const save = () => {
       const c = convRef.current
@@ -189,34 +202,36 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
 
   const refreshList = useCallback(() => {
     window.electronAPI?.listConversations()?.then((list) => {
-      uiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
+      aiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
     }).catch(() => {})
-  }, [uiDispatch])
+  }, [aiDispatch])
 
   const handleNewChat = useCallback(() => {
     stream.stop()
-    if (conv.rootId) persistConversation(conv)
+    if (convRef.current.rootId) persistConversation(convRef.current)
     setConv(createConversation())
     setViewMode('chat')
     refreshList()
-  }, [conv, setConv, refreshList, stream])
+  }, [setConv, refreshList, stream])
 
   const handleSelectConversation = useCallback(async (id: string) => {
     // B2: switching conversations mid-stream must not let stale chunks
     // resurrect the old one — cancel first, the id guard covers the rest.
-    if (conv.id !== id) stream.stop()
-    if (conv.rootId && conv.id !== id) persistConversation(conv)
+    const current = convRef.current
+    if (current.id !== id) stream.stop()
+    if (current.rootId && current.id !== id) persistConversation(current)
     const data = await loadValidatedConversation(id)
     if (data) setConv(data)
     setViewMode('chat')
     refreshList()
-  }, [conv, setConv, refreshList, stream])
+  }, [setConv, refreshList, stream])
 
   const handleRenameConversation = useCallback(async (id: string, title: string) => {
+    const current = convRef.current
     // B15: renaming the current conversation must use the in-memory version —
     // re-reading from disk would clobber unsaved messages with a stale snapshot.
-    if (conv.id === id) {
-      const updated = { ...conv, title }
+    if (current.id === id) {
+      const updated = { ...current, title }
       setConv(updated)
       persistConversation(updated)
       refreshList()
@@ -227,17 +242,17 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
       await window.electronAPI?.saveConversation(id, { ...data, title })
       refreshList()
     }
-  }, [conv, setConv, refreshList])
+  }, [setConv, refreshList])
 
   const handleDeleteConversation = useCallback(async (id: string) => {
-    if (conv.id === id) stream.stop()
+    if (convRef.current.id === id) stream.stop()
     await window.electronAPI?.deleteConversation(id)
-    if (conv.id === id) {
+    if (convRef.current.id === id) {
       setConv(createConversation())
       setViewMode('chat')
     }
     refreshList()
-  }, [conv.id, setConv, refreshList, stream])
+  }, [setConv, refreshList, stream])
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900">

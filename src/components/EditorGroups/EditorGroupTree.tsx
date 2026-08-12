@@ -2,7 +2,7 @@ import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
 import { isEditorGroup, isSplitNode } from '../../types'
 import type { LayoutNode } from '../../types'
-import { useLayoutContext } from '../../context/AppContext'
+import { useLayoutDispatch } from '../../context/AppContext'
 import { EditorGroup } from './EditorGroup'
 
 interface EditorGroupTreeProps {
@@ -10,7 +10,7 @@ interface EditorGroupTreeProps {
 }
 
 export function EditorGroupTree({ node }: EditorGroupTreeProps) {
-  const { dispatch } = useLayoutContext()
+  const dispatch = useLayoutDispatch()
 
   if (isEditorGroup(node)) {
     return <EditorGroup group={node} />

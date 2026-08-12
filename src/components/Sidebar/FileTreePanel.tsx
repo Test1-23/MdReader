@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, memo } from 'react'
-import { useLayoutContext, useUIContext } from '../../context/AppContext'
+import { useLayoutContext, useUIDispatch } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
 import { openFileByPath, generateTabId } from '../../utils/fileReader'
 import type { FileTreeNode, FileDirEntry } from '../../types'
@@ -84,7 +84,7 @@ const expandedChildren = new Set<string>()
 
 export function FileTreePanel() {
   const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
-  const { dispatch: uiDispatch } = useUIContext()
+  const uiDispatch = useUIDispatch()
   const { openFolderDialog, openFileDialog, readDir, readFile } = useElectronAPI()
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
   const expandedRef = useRef(expandedDirs)

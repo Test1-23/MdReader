@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react'
-import { useLayoutContext, useUIContext } from '../context/AppContext'
+import { useLayoutDispatch, useUIDispatch } from '../context/AppContext'
 import { useElectronAPI } from './useElectronAPI'
 import { readDroppedMarkdownFiles, generateTabId } from '../utils/fileReader'
 
 export function useDragDrop() {
-  const { dispatch: layoutDispatch } = useLayoutContext()
-  const { dispatch: uiDispatch } = useUIContext()
+  const layoutDispatch = useLayoutDispatch()
+  const uiDispatch = useUIDispatch()
   const { readFile, isElectron } = useElectronAPI()
   const dragCounter = useRef(0)
 

@@ -1,8 +1,11 @@
+import { memo } from 'react'
+
 interface RawSourceViewProps {
   content: string
 }
 
-export function RawSourceView({ content }: RawSourceViewProps) {
+// memo: content-identical renders skip rebuilding the full line-by-line DOM
+export const RawSourceView = memo(function RawSourceView({ content }: RawSourceViewProps) {
   const lines = content.split('\n')
 
   return (
@@ -34,4 +37,4 @@ export function RawSourceView({ content }: RawSourceViewProps) {
       </div>
     </div>
   )
-}
+})

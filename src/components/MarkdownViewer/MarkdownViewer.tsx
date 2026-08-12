@@ -1,9 +1,9 @@
-import React, { useCallback } from 'react'
+import React, { memo, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { useLayoutContext, useUIContext } from '../../context/AppContext'
+import { useUIContext, useLayoutDispatch, useUIDispatch } from '../../context/AppContext'
 import { headingToId } from '../../utils/markdown'
 
 interface MarkdownViewerProps {
@@ -134,9 +134,12 @@ const COMPONENTS = {
   blockquote: BlockquoteRenderer,
 }
 
-export function MarkdownViewer({ content }: MarkdownViewerProps) {
-  const { dispatch: layoutDispatch } = useLayoutContext()
-  const { dispatch: uiDispatch } = useUIContext()
+// memo: content-identical renders skip the full ReactMarkdown parse + Prism
+// highlighting. Dispatch-only subscriptions keep this component out of layout
+// and chat churn entirely (P1/R2).
+export const MarkdownViewer = memo(function MarkdownViewer({ content }: MarkdownViewerProps) {
+  const layoutDispatch = useLayoutDispatch()
+  const uiDispatch = useUIDispatch()
 
   const handleMouseUp = useCallback(() => {
     const selection = window.getSelection()
@@ -161,4 +164,4 @@ export function MarkdownViewer({ content }: MarkdownViewerProps) {
       </ReactMarkdown>
     </div>
   )
-}
+})

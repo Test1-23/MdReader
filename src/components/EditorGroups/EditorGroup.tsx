@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLayoutContext, useUIContext } from '../../context/AppContext'
+import { useLayoutContext, useUIDispatch } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
 import { readDroppedMarkdownFiles, generateTabId, openFileByPath } from '../../utils/fileReader'
 import type { EditorGroup as EditorGroupType, SplitPosition } from '../../types'
@@ -50,7 +50,7 @@ interface EditorGroupProps {
 
 export function EditorGroup({ group }: EditorGroupProps) {
   const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
-  const { dispatch: uiDispatch } = useUIContext()
+  const uiDispatch = useUIDispatch()
   const { readFile, isElectron } = useElectronAPI()
   const isActive = layoutState.activeGroupId === group.id
 

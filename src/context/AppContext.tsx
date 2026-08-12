@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer } from 'react'
-import type { LayoutState, LayoutAction, UIState, UIAction } from '../types'
+import type { LayoutState, LayoutAction, UIState, UIAction, UIStateView, AIChatState } from '../types'
 import { isEditorGroup, isSplitNode } from '../types'
 import {
   findGroup,
@@ -182,6 +182,8 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     case 'TOGGLE_SIDEBAR':
       return { ...state, sidebarVisible: !state.sidebarVisible }
     case 'SET_DRAG_OVER':
+      // P3: 相等性 guard（对齐 SET_SELECTION）——重复 dispatch 不再产生无效重渲染
+      if (state.isDragOver === action.payload) return state
       return { ...state, isDragOver: action.payload }
     case 'SET_ERROR':
       return { ...state, error: action.payload }
@@ -214,6 +216,11 @@ function uiReducer(state: UIState, action: UIAction): UIState {
 }
 
 // ---- Contexts ----
+//
+// R2/P1: three state contexts (layout / UI / AI chat) + two stable dispatch
+// contexts. The AI slice updates on every stream chunk — after this split it
+// reaches only AI consumers. Dispatch-only components subscribe to the
+// never-changing dispatch contexts and skip re-renders entirely.
 
 interface LayoutContextType {
   state: LayoutState
@@ -221,12 +228,20 @@ interface LayoutContextType {
 }
 
 interface UIContextType {
-  state: UIState
+  state: UIStateView
   dispatch: React.Dispatch<UIAction>
 }
 
-const LayoutContext = createContext<LayoutContextType | null>(null)
-const UIContext = createContext<UIContextType | null>(null)
+interface AIContextType {
+  state: AIChatState
+  dispatch: React.Dispatch<UIAction>
+}
+
+const LayoutStateContext = createContext<LayoutState | null>(null)
+const LayoutDispatchContext = createContext<React.Dispatch<LayoutAction> | null>(null)
+const UIStateContext = createContext<UIStateView | null>(null)
+const AIChatStateContext = createContext<AIChatState | null>(null)
+const UIDispatchContext = createContext<React.Dispatch<UIAction> | null>(null)
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [layoutState, layoutDispatch] = useReducer(layoutReducer, initialLayout)
@@ -261,23 +276,72 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // P1: memoized slice values — chat chunks must not rebuild the other contexts
+  const uiStateValue = React.useMemo<UIStateView>(() => ({
+    activeActivity: uiState.activeActivity,
+    sidebarVisible: uiState.sidebarVisible,
+    isDragOver: uiState.isDragOver,
+    error: uiState.error,
+    darkMode: uiState.darkMode,
+    apiEndpoint: uiState.apiEndpoint,
+    apiKeySaved: uiState.apiKeySaved,
+    apiModel: uiState.apiModel,
+  }), [
+    uiState.activeActivity, uiState.sidebarVisible, uiState.isDragOver, uiState.error,
+    uiState.darkMode, uiState.apiEndpoint, uiState.apiKeySaved, uiState.apiModel,
+  ])
+
+  const aiStateValue = React.useMemo<AIChatState>(() => ({
+    selectedText: uiState.selectedText,
+    aiConversation: uiState.aiConversation,
+    conversationList: uiState.conversationList,
+  }), [uiState.selectedText, uiState.aiConversation, uiState.conversationList])
+
   return (
-    <LayoutContext.Provider value={{ state: layoutState, dispatch: layoutDispatch }}>
-      <UIContext.Provider value={{ state: uiState, dispatch: uiDispatch }}>
-        {children}
-      </UIContext.Provider>
-    </LayoutContext.Provider>
+    <LayoutStateContext.Provider value={layoutState}>
+      <LayoutDispatchContext.Provider value={layoutDispatch}>
+        <UIStateContext.Provider value={uiStateValue}>
+          <AIChatStateContext.Provider value={aiStateValue}>
+            <UIDispatchContext.Provider value={uiDispatch}>
+              {children}
+            </UIDispatchContext.Provider>
+          </AIChatStateContext.Provider>
+        </UIStateContext.Provider>
+      </LayoutDispatchContext.Provider>
+    </LayoutStateContext.Provider>
   )
 }
 
 export function useLayoutContext(): LayoutContextType {
-  const ctx = useContext(LayoutContext)
-  if (!ctx) throw new Error('useLayoutContext must be used within AppProvider')
-  return ctx
+  const state = useContext(LayoutStateContext)
+  const dispatch = useContext(LayoutDispatchContext)
+  if (!state || !dispatch) throw new Error('useLayoutContext must be used within AppProvider')
+  return { state, dispatch }
 }
 
 export function useUIContext(): UIContextType {
-  const ctx = useContext(UIContext)
-  if (!ctx) throw new Error('useUIContext must be used within AppProvider')
-  return ctx
+  const state = useContext(UIStateContext)
+  const dispatch = useContext(UIDispatchContext)
+  if (!state || !dispatch) throw new Error('useUIContext must be used within AppProvider')
+  return { state, dispatch }
+}
+
+export function useAIContext(): AIContextType {
+  const state = useContext(AIChatStateContext)
+  const dispatch = useContext(UIDispatchContext)
+  if (!state || !dispatch) throw new Error('useAIContext must be used within AppProvider')
+  return { state, dispatch }
+}
+
+// Dispatch-only hooks — subscribe to the stable dispatch contexts, never re-render
+export function useLayoutDispatch(): React.Dispatch<LayoutAction> {
+  const dispatch = useContext(LayoutDispatchContext)
+  if (!dispatch) throw new Error('useLayoutDispatch must be used within AppProvider')
+  return dispatch
+}
+
+export function useUIDispatch(): React.Dispatch<UIAction> {
+  const dispatch = useContext(UIDispatchContext)
+  if (!dispatch) throw new Error('useUIDispatch must be used within AppProvider')
+  return dispatch
 }
