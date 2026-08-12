@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from './ipc/channels'
 import type {
-  ApiConfig, ChatMessage, FileDirEntry, FileReadResult, ConversationSummary,
+  ApiConfig, PublicApiConfig, ChatRequestConfig, ChatMessage, FileDirEntry, FileReadResult, ConversationSummary,
 } from '../src/types/ipc'
 
 export interface ElectronAPI {
@@ -17,12 +17,12 @@ export interface ElectronAPI {
 
   // Settings operations
   saveApiConfig: (config: ApiConfig) => Promise<void>
-  loadApiConfig: () => Promise<ApiConfig | null>
+  loadApiConfig: () => Promise<PublicApiConfig | null>
   clearApiConfig: () => Promise<void>
 
-  // AI operations
-  aiChat: (messages: ChatMessage[], config: ApiConfig) => Promise<string>
-  aiChatStream: (requestId: string, messages: ChatMessage[], config: ApiConfig) => Promise<void>
+  // AI operations — config carries no API key; the main process attaches it (S1)
+  aiChat: (messages: ChatMessage[], config: ChatRequestConfig) => Promise<string>
+  aiChatStream: (requestId: string, messages: ChatMessage[], config: ChatRequestConfig) => Promise<void>
   cancelAiStream: (requestId: string) => Promise<void>
   onAiChunk: (cb: (data: { requestId: string; delta: string }) => void) => () => void
   onAiReasoning: (cb: (data: { requestId: string; delta: string }) => void) => () => void

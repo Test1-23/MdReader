@@ -1,14 +1,17 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import { registerFileHandlers } from './ipc/fileHandlers'
 import { registerDialogHandlers } from './ipc/dialogHandlers'
 import { registerSettingsHandlers } from './ipc/settingsHandlers'
-import { registerAiHandlers } from './ipc/aiHandlers'
+import { registerAiHandlers, abortAllStreams } from './ipc/aiHandlers'
+import { setMainWindowGetter } from './ipc/security'
 
 let mainWindow: BrowserWindow | null = null
 
+setMainWindowGetter(() => mainWindow)
+
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 800,
@@ -21,26 +24,46 @@ function createWindow() {
     },
     titleBarStyle: 'default',
   })
+  mainWindow = win
 
-  // Register IPC handlers
-  registerFileHandlers(ipcMain)
-  registerDialogHandlers(ipcMain, mainWindow)
-  registerSettingsHandlers(ipcMain)
-  registerAiHandlers(ipcMain)
+  // S3: never navigate the window itself — external links open in the system browser.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https:') || url.startsWith('http:')) {
+      void shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (event) => event.preventDefault())
+
+  win.on('closed', () => {
+    // B19n: streams targeting a destroyed webContents would throw on send and
+    // keep burning network — abort everything tied to this window.
+    abortAllStreams()
+    if (mainWindow === win) mainWindow = null
+  })
 
   if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
-    mainWindow.webContents.openDevTools()
+    win.loadURL(process.env.VITE_DEV_SERVER_URL)
+    win.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(join(__dirname, '../dist/index.html'))
+    win.loadFile(join(__dirname, '../dist/index.html'))
   }
-
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
 }
 
-app.whenReady().then(createWindow)
+// B19p: register IPC handlers exactly once. Previously this happened inside
+// createWindow(), which crashes with "second handler registered" on macOS
+// when the window is recreated via the activate event.
+function registerIpcHandlers() {
+  registerFileHandlers(ipcMain)
+  registerDialogHandlers(ipcMain)
+  registerSettingsHandlers(ipcMain)
+  registerAiHandlers(ipcMain)
+}
+
+app.whenReady().then(() => {
+  registerIpcHandlers()
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

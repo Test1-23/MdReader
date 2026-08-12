@@ -31,6 +31,8 @@ export async function readDroppedFile(
 
   if (isElectron && (file as any).path) {
     filePath = (file as any).path
+    // S6: register drag-dropped files as explicitly user-opened before reading
+    window.electronAPI?.authorizePath?.(filePath)
     const result = await readFile(filePath)
     content = result.content
     size = result.size

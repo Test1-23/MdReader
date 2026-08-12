@@ -6,32 +6,42 @@ export function SettingsPanel() {
   const { state, dispatch } = useUIContext()
   const { isElectron } = useElectronAPI()
   const [endpoint, setEndpoint] = useState(state.apiEndpoint)
-  const [apiKey, setApiKey] = useState(state.apiKey)
+  const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState(state.apiModel)
+  const [hasKey, setHasKey] = useState(state.apiKeySaved)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    // Load saved config on mount
+    // Load saved config on mount — S1: the key itself never comes back to the
+    // renderer, only whether one is stored.
     if (isElectron && window.electronAPI) {
       window.electronAPI.loadApiConfig().then((config) => {
         if (config) {
           setEndpoint(config.endpoint)
-          setApiKey(config.apiKey)
           setModel(config.model)
-          dispatch({ type: 'SETTINGS_UPDATE', payload: config })
+          setHasKey(config.hasKey)
+          dispatch({ type: 'SETTINGS_UPDATE', payload: { endpoint: config.endpoint, model: config.model, hasKey: config.hasKey } })
         }
-      })
+      }).catch(() => { /* no config file */ })
     }
   }, [isElectron, dispatch])
 
+  // Clean up the "Saved ✓" timer on unmount
+  useEffect(() => {
+    const timer = saved ? setTimeout(() => setSaved(false), 2000) : undefined
+    return () => { if (timer) clearTimeout(timer) }
+  }, [saved])
+
   const handleSave = async () => {
+    // Empty key input = keep the stored key (the renderer can never read it back)
     const config = { endpoint, apiKey, model }
     if (isElectron && window.electronAPI) {
       await window.electronAPI.saveApiConfig(config)
     }
-    dispatch({ type: 'SETTINGS_UPDATE', payload: config })
+    dispatch({ type: 'SETTINGS_UPDATE', payload: { endpoint, model, hasKey: hasKey || !!apiKey } })
+    setHasKey(hasKey || !!apiKey)
+    setApiKey('')
     setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
   }
 
   const handleClear = async () => {
@@ -41,7 +51,8 @@ export function SettingsPanel() {
     setEndpoint('')
     setApiKey('')
     setModel('')
-    dispatch({ type: 'SETTINGS_UPDATE', payload: { endpoint: '', apiKey: '', model: '' } })
+    setHasKey(false)
+    dispatch({ type: 'SETTINGS_UPDATE', payload: { endpoint: '', model: '', hasKey: false } })
   }
 
   return (
@@ -71,11 +82,11 @@ export function SettingsPanel() {
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-..."
+            placeholder={hasKey ? '•••••••• 已保存，留空保持不变' : 'sk-...'}
             className="w-full px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
           <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-            Encrypted via system keychain (Electron safeStorage)
+            Encrypted via system keychain (Electron safeStorage). The key never leaves the main process.
           </p>
         </div>
 

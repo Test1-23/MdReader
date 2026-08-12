@@ -1,18 +1,58 @@
 import { IpcMain } from 'electron'
-import { readFile, readdir, stat } from 'fs/promises'
-import { extname, join } from 'path'
+import { open, readdir, stat } from 'fs/promises'
+import { extname, join, resolve, sep } from 'path'
 import type { FileDirEntry } from '../../src/types/ipc'
 import { IPC_CHANNELS } from './channels'
+import { assertTrustedSender } from './security'
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024 // P7: reject files beyond 20MB with a clear error
+
+// S6: only paths the user explicitly opened (folder dialog / file dialog /
+// drag-drop) may be read. Dialog handlers auto-authorize; the renderer calls
+// file:authorizePath for drag-dropped files.
+const authorizedRoots = new Set<string>()
+
+function normalizePath(p: string): string {
+  const resolved = resolve(p)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
+export function authorizePath(p: string): void {
+  authorizedRoots.add(normalizePath(p))
+}
+
+export function isAuthorized(filePath: string): boolean {
+  const target = normalizePath(filePath)
+  for (const root of authorizedRoots) {
+    if (target === root) return true
+    if (target.startsWith(root.endsWith(sep) ? root : root + sep)) return true
+  }
+  return false
+}
 
 export function registerFileHandlers(ipcMain: IpcMain) {
-  ipcMain.handle(IPC_CHANNELS.FILE_READ, async (_event, filePath: string) => {
+  ipcMain.handle(IPC_CHANNELS.FILE_READ, async (event, filePath: string) => {
+    assertTrustedSender(event)
     try {
-      const content = await readFile(filePath, 'utf-8')
       const stats = await stat(filePath)
-      return {
-        content,
-        size: stats.size,
-        lastModified: stats.mtimeMs,
+      // P7: reading a multi-hundred-MB log file whole + structured-cloning it
+      // over IPC would OOM — reject clearly instead.
+      if (stats.size > MAX_FILE_SIZE) {
+        throw new Error(`File too large (${(stats.size / 1024 / 1024).toFixed(1)}MB, limit 20MB)`)
+      }
+      // B19l: read size/mtime and content from the same open handle so the
+      // returned stats always describe the content that was actually read.
+      const handle = await open(filePath, 'r')
+      try {
+        const fstats = await handle.stat()
+        const content = await handle.readFile('utf-8')
+        return {
+          content,
+          size: fstats.size,
+          lastModified: fstats.mtimeMs,
+        }
+      } finally {
+        await handle.close()
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
@@ -20,7 +60,15 @@ export function registerFileHandlers(ipcMain: IpcMain) {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.FILE_READ_DIR, async (_event, dirPath: string) => {
+  ipcMain.handle(IPC_CHANNELS.FILE_AUTHORIZE_PATH, (event, p: unknown) => {
+    assertTrustedSender(event)
+    if (typeof p === 'string' && p.length > 0) {
+      authorizePath(p)
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FILE_READ_DIR, async (event, dirPath: string) => {
+    assertTrustedSender(event)
     try {
       const entries = await readdir(dirPath, { withFileTypes: true })
       const result: FileDirEntry[] = entries
@@ -50,11 +98,15 @@ export function registerFileHandlers(ipcMain: IpcMain) {
 
       return result
     } catch (error) {
-      throw new Error(`Failed to read directory: ${dirPath}`)
+      // B19k: keep the original errno so permission errors and missing paths
+      // are distinguishable.
+      const msg = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to read directory: ${dirPath} — ${msg}`)
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.FILE_GET_INFO, async (_event, filePath: string) => {
+  ipcMain.handle(IPC_CHANNELS.FILE_GET_INFO, async (event, filePath: string) => {
+    assertTrustedSender(event)
     try {
       const stats = await stat(filePath)
       return {

@@ -14,6 +14,14 @@ export interface PublicApiConfig {
   hasKey: boolean
 }
 
+// Renderer-side request config for ai:chat / ai:chatStream — the main process
+// attaches the API key from disk itself (S1).
+export interface ChatRequestConfig {
+  endpoint: string
+  model: string
+  thinking?: boolean
+}
+
 export interface ChatMessage {
   role: string
   content: string

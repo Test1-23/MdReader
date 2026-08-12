@@ -144,7 +144,7 @@ const initialUI: UIState = {
   error: null,
   darkMode: localStorage.getItem('mdreader-dark-mode') === 'true',
   apiEndpoint: '',
-  apiKey: '',
+  apiKeySaved: false,
   apiModel: '',
   selectedText: null,
   aiConversation: null,
@@ -167,7 +167,7 @@ function uiReducer(state: UIState, action: UIAction): UIState {
       return { ...state, darkMode: next }
     }
     case 'SETTINGS_UPDATE':
-      return { ...state, apiEndpoint: action.payload.endpoint, apiKey: action.payload.apiKey, apiModel: action.payload.model }
+      return { ...state, apiEndpoint: action.payload.endpoint, apiKeySaved: action.payload.hasKey, apiModel: action.payload.model }
     case 'SET_SELECTION': {
       // 相等性 guard：相同文本不产生新 state（防止文档内每次点击全量重渲染）
       if (state.selectedText === action.payload.text) return state
@@ -206,7 +206,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (window.electronAPI?.loadApiConfig) {
       window.electronAPI.loadApiConfig().then((config) => {
         if (config && config.endpoint) {
-          uiDispatch({ type: 'SETTINGS_UPDATE', payload: config })
+          uiDispatch({ type: 'SETTINGS_UPDATE', payload: { endpoint: config.endpoint, model: config.model, hasKey: config.hasKey } })
         }
       }).catch(() => { /* no config file */ })
     }

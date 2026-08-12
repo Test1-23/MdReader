@@ -100,9 +100,9 @@ export interface UIState {
   error: string | null
   darkMode: boolean
 
-  // Settings
+  // Settings（S1: apiKey 永不出主进程，渲染层只知"是否有已保存的 key"）
   apiEndpoint: string
-  apiKey: string
+  apiKeySaved: boolean
   apiModel: string
 
   // AI Chat
@@ -145,7 +145,7 @@ export type UIAction =
   | { type: 'SET_DRAG_OVER'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'TOGGLE_DARK_MODE' }
-  | { type: 'SETTINGS_UPDATE'; payload: { endpoint: string; apiKey: string; model: string } }
+  | { type: 'SETTINGS_UPDATE'; payload: { endpoint: string; model: string; hasKey: boolean } }
   | { type: 'SET_SELECTION'; payload: { text: string | null } }
   | { type: 'SET_AI_CONVERSATION'; payload: import('../utils/conversationTree').Conversation | null }
   | { type: 'SET_CONVERSATION_LIST'; payload: Array<{ id: string; title: string; updatedAt: number }> }

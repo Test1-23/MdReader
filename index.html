@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- S4: injected per-mode by Vite (%VITE_CSP% from .env.development / .env.production).
+         Markdown is rendered as raw HTML, so script-src is locked down in production. -->
+    <meta http-equiv="Content-Security-Policy" content="%VITE_CSP%" />
     <title>MdReader</title>
   </head>
   <body class="h-full overflow-hidden bg-white text-gray-900">

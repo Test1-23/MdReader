@@ -68,7 +68,8 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
 
     const userNode = working.nodes[userNodeId]
     const messages = buildMessages(working, userNodeId, userNode.content, userNode.selectedText, docContentRef.current)
-    const config = { endpoint: uiState.apiEndpoint, apiKey: uiState.apiKey, model: uiState.apiModel }
+    // S1: 渲染层不再持有 apiKey —— 主进程从磁盘自行附加
+    const config = { endpoint: uiState.apiEndpoint, model: uiState.apiModel }
 
     if (!window.electronAPI?.aiChatStream) {
       // Dev fallback
@@ -119,7 +120,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     setStreaming(false)
     requestIdRef.current = null
     return working
-  }, [setConv, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel])
+  }, [setConv, uiState.apiEndpoint, uiState.apiModel])
 
   // ---- 停止生成 ----
   const handleStop = useCallback(() => {
@@ -140,7 +141,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     setConv(updated)
 
     // Missing API config → show a helpful message instead of silently failing
-    if (!uiState.apiEndpoint || !uiState.apiKey || !uiState.apiModel) {
+    if (!uiState.apiEndpoint || !uiState.apiKeySaved || !uiState.apiModel) {
       const hint = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
       setConv(addAssistantNode(updated, hint))
       return
@@ -154,7 +155,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     } catch (err: any) {
       setConv(replaceAssistantReply(updated, updated.activeNodeId!, `Error: ${err.message || 'Unknown error'}`))
     }
-  }, [conv, selectedText, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel, setConv, streamAi])
+  }, [conv, selectedText, uiState.apiEndpoint, uiState.apiKeySaved, uiState.apiModel, setConv, streamAi])
 
   const handleSwitchBranch = useCallback((nodeId: string) => {
     const next = switchBranch(conv, nodeId)
@@ -204,7 +205,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     const updated = replaceNodeContent(conv, nodeId, newText)
     setConv(updated)
 
-    if (!uiState.apiEndpoint || !uiState.apiKey || !uiState.apiModel) {
+    if (!uiState.apiEndpoint || !uiState.apiKeySaved || !uiState.apiModel) {
       const hint = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
       setConv(addAssistantNode(updated, hint, nodeId))
       return
@@ -218,7 +219,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     } catch (err: any) {
       setConv(replaceAssistantReply(updated, nodeId, `Error: ${err.message || 'Unknown error'}`))
     }
-  }, [conv, setConv, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel, streamAi])
+  }, [conv, setConv, uiState.apiEndpoint, uiState.apiKeySaved, uiState.apiModel, streamAi])
 
   // ---- 关闭窗口（回收 pane，对话保留在 context）----
   const handleClose = useCallback(() => {

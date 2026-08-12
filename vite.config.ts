@@ -36,6 +36,8 @@ export default defineConfig({
     electronRenderer()
   ],
   build: {
-    outDir: 'dist'
+    outDir: 'dist',
+    // B5: absolute "/assets/..." paths break under loadFile (file:// protocol)
+    base: './',
   }
 })
