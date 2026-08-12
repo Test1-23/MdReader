@@ -212,6 +212,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Fix 4: 启动时自动恢复上次对话（按 updatedAt 降序取第一条）
+  React.useEffect(() => {
+    if (window.electronAPI?.listConversations) {
+      window.electronAPI.listConversations().then((list) => {
+        if (list.length > 0) {
+          const last = list[0]
+          window.electronAPI!.loadConversation(last.id).then((data) => {
+            if (data && typeof data === 'object' && 'nodes' in data) {
+              uiDispatch({ type: 'SET_AI_CONVERSATION', payload: data as any })
+              uiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
+            }
+          }).catch(() => {})
+        }
+      }).catch(() => {})
+    }
+  }, [])
+
   return (
     <LayoutContext.Provider value={{ state: layoutState, dispatch: layoutDispatch }}>
       <UIContext.Provider value={{ state: uiState, dispatch: uiDispatch }}>

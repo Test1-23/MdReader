@@ -24,6 +24,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
   const requestIdRef = useRef<string | null>(null)
   const reasoningStartRef = useRef<number>(0)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
   const selectedText = uiState.selectedText
   const conv = uiState.aiConversation ?? createConversation()
@@ -117,9 +118,13 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const handleStop = useCallback(() => {
     if (requestIdRef.current) {
       window.electronAPI?.cancelAiStream(requestIdRef.current)
+      // Fix 6: 保存已生成的部分
+      if (conv.rootId && window.electronAPI?.saveConversation) {
+        window.electronAPI.saveConversation(conv.id, conv)
+      }
       requestIdRef.current = null
     }
-  }, [])
+  }, [conv])
 
   // ---- 发送 ----
   const handleSend = useCallback(async (message: string) => {
@@ -145,7 +150,10 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   }, [conv, selectedText, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel, setConv, streamAi])
 
   const handleSwitchBranch = useCallback((nodeId: string) => {
-    setConv(switchBranch(conv, nodeId))
+    const next = switchBranch(conv, nodeId)
+    setConv(next)
+    // Fix 5: 防抖保存分支切换（1s 内多次切换只保存最后一次）
+    debouncedSave(next)
   }, [conv, setConv])
 
   // 树形图点击节点 → 回溯到该对的 AI 回复节点（若无回复则回到 user 节点），并切回聊天视图
@@ -208,18 +216,36 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   // ---- 关闭窗口（回收 pane，对话保留在 context）----
   const handleClose = useCallback(() => {
     if (!layoutState.layoutRoot) return
+    // Fix 1: 关闭前保存当前对话
+    if (conv.rootId) window.electronAPI?.saveConversation?.(conv.id, conv)
     const group = findGroupContainingTab(layoutState.layoutRoot, tabId)
     if (group) {
       layoutDispatch({ type: 'CLOSE_TAB', payload: { groupId: group.id, tabId } })
     }
-  }, [layoutState.layoutRoot, tabId, layoutDispatch])
+  }, [layoutState.layoutRoot, tabId, layoutDispatch, conv])
 
   // ---- 对话管理 ----
-  const saveCurrentConv = useCallback((c: typeof conv) => {
-    if (window.electronAPI?.saveConversation) {
-      window.electronAPI.saveConversation(c.id, c)
+  // 防抖保存（分支切换时 1s 内只保存一次）——不包装为 useCallback，避免声明顺序问题
+  const debouncedSave = (c: typeof conv) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      window.electronAPI?.saveConversation?.(c.id, c)
+    }, 1000)
+  }
+
+  // 窗口关闭前保存当前对话（Fix 2: beforeunload）
+  useEffect(() => {
+    const save = () => {
+      if (conv.rootId && window.electronAPI?.saveConversation) {
+        window.electronAPI.saveConversation(conv.id, conv)
+      }
     }
-  }, [])
+    window.addEventListener('beforeunload', save)
+    return () => {
+      window.removeEventListener('beforeunload', save)
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [conv])
 
   const refreshList = useCallback(() => {
     window.electronAPI?.listConversations()?.then((list) => {
@@ -228,21 +254,27 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   }, [uiDispatch])
 
   const handleNewChat = useCallback(() => {
-    if (conv.rootId) saveCurrentConv(conv) // 切换前保存当前对话
+    if (conv.rootId) window.electronAPI?.saveConversation?.(conv.id, conv) // 切换前保存当前对话
     setConv(createConversation())
     setViewMode('chat')
     refreshList()
-  }, [conv, saveCurrentConv, setConv, refreshList])
+  }, [conv, window.electronAPI?.saveConversation?.(conv.id, conv), setConv, refreshList])
 
   const handleSelectConversation = useCallback(async (id: string) => {
-    if (conv.rootId && conv.id !== id) saveCurrentConv(conv)
+    if (conv.rootId && conv.id !== id) window.electronAPI?.saveConversation?.(conv.id, conv)
     const data = await window.electronAPI?.loadConversation(id)
-    if (data && typeof data === 'object' && 'nodes' in data) {
-      setConv(data as typeof conv)
+    // 校验：确保关键字段存在（Fix 3）
+    if (data && typeof data === 'object' && 'nodes' in data && 'rootId' in data && 'id' in data) {
+      const d = data as typeof conv
+      // 规范化：activeNodeId 必须指向存在的节点
+      if (d.activeNodeId && !d.nodes[d.activeNodeId]) {
+        d.activeNodeId = d.rootId
+      }
+      setConv(d)
     }
     setViewMode('chat')
     refreshList()
-  }, [conv, saveCurrentConv, setConv, refreshList])
+  }, [conv, window.electronAPI?.saveConversation?.(conv.id, conv), setConv, refreshList])
 
   const handleRenameConversation = useCallback(async (id: string, title: string) => {
     const data = await window.electronAPI?.loadConversation(id)
