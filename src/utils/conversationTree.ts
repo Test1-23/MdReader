@@ -165,6 +165,14 @@ export function replaceAssistantReply(conv: Conversation, userNodeId: string, ne
   return { ...conv, nodes, activeNodeId: reply.id, updatedAt: Date.now() }
 }
 
+// 增量追加到 AI 回复节点（流式显示）
+export function appendAssistantContent(conv: Conversation, userNodeId: string, delta: string): Conversation {
+  const reply = getAssistantReply(conv, userNodeId)
+  if (!reply) return conv
+  const nodes = { ...conv.nodes, [reply.id]: { ...reply, content: reply.content + delta } }
+  return { ...conv, nodes, updatedAt: Date.now() }
+}
+
 // ---- Tree View Helpers ----
 
 // 获取 user 节点的 AI 回复（第一个 assistant 子节点）
@@ -206,16 +214,20 @@ export function buildMessages(
   conv: Conversation,
   nodeId: string,
   userInput: string,
-  selectedText?: string
+  selectedText?: string,
+  documentContent?: string
 ): Array<{ role: string; content: string }> {
   const path = getPath(conv, nodeId)
   const messages: Array<{ role: string; content: string }> = []
 
-  // System message: brief context
-  messages.push({
-    role: 'system',
-    content: 'You are a helpful assistant. The user is reading a Markdown document and has selected some text for context. Answer concisely.',
-  })
+  // System message: whole document wrapped in <document> + context
+  const sysParts = [
+    'You are a helpful assistant. The user is reading a Markdown document and has selected some text for context. Answer concisely.',
+  ]
+  if (documentContent) {
+    sysParts.push(`\n\nThe document the user is reading:\n<document>\n${documentContent}\n</document>`)
+  }
+  messages.push({ role: 'system', content: sysParts.join('') })
 
   // History from the path (excluding root node if it's the first user message with selected text)
   for (const node of path) {

@@ -1,8 +1,8 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useLayoutContext, useUIContext } from '../../context/AppContext'
 import {
   createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages,
-  getAssistantReply, replaceNodeContent, replaceAssistantReply,
+  getAssistantReply, replaceNodeContent, replaceAssistantReply, appendAssistantContent,
 } from '../../utils/conversationTree'
 import { findGroupContainingTab } from '../../utils/layout'
 import { ChatView } from './ChatView'
@@ -18,8 +18,9 @@ interface AIChatPanelProps {
 export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const { state: uiState, dispatch: uiDispatch } = useUIContext()
   const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
-  const [loading, setLoading] = useState(false)
+  const [streaming, setStreaming] = useState(false)
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
+  const requestIdRef = useRef<string | null>(null)
 
   const selectedText = uiState.selectedText
   const conv = uiState.aiConversation ?? createConversation()
@@ -28,9 +29,80 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     uiDispatch({ type: 'SET_AI_CONVERSATION', payload: next })
   }, [uiDispatch])
 
-  const handleSend = useCallback(async (message: string) => {
-    setLoading(true)
+  // ---- 当前文档全文（喂给 AI 的上下文）----
+  const docContentRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (!layoutState.layoutRoot || !layoutState.activeTabId) {
+      docContentRef.current = undefined
+      return
+    }
+    const group = findGroupContainingTab(layoutState.layoutRoot, layoutState.activeTabId)
+    const tab = group?.tabs.find((t) => t.id === layoutState.activeTabId)
+    const file = tab ? layoutState.openFiles[tab.fileId] : undefined
+    docContentRef.current = file?.content
+  }, [layoutState.layoutRoot, layoutState.activeTabId, layoutState.openFiles])
 
+  // ---- 流式请求封装：为该 user 节点发起流式生成，chunk 增量追加 ----
+  const streamAi = useCallback(async (currentConv: typeof conv, userNodeId: string): Promise<typeof conv> => {
+    const requestId = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    requestIdRef.current = requestId
+    setStreaming(true)
+
+    // 创建/复用空 assistant 节点（流式填充）
+    let working = currentConv
+    const existing = getAssistantReply(currentConv, userNodeId)
+    working = existing ? replaceAssistantReply(working, userNodeId, '') : addAssistantNode(working, '', userNodeId)
+    setConv(working)
+
+    const userNode = working.nodes[userNodeId]
+    const messages = buildMessages(working, userNodeId, userNode.content, userNode.selectedText, docContentRef.current)
+    const config = { endpoint: uiState.apiEndpoint, apiKey: uiState.apiKey, model: uiState.apiModel }
+
+    if (!window.electronAPI?.aiChatStream) {
+      // Dev fallback
+      working = appendAssistantContent(working, userNodeId, `[DEV MODE] AI not available. You asked: "${userNode.content.slice(0, 100)}"`)
+      setConv(working)
+      setStreaming(false)
+      requestIdRef.current = null
+      return working
+    }
+
+    await new Promise<void>((resolve) => {
+      const offChunk = window.electronAPI!.onAiChunk!(({ requestId: rid, delta }) => {
+        if (rid !== requestId) return
+        working = appendAssistantContent(working, userNodeId, delta)
+        setConv(working)
+      })
+      const offDone = window.electronAPI!.onAiDone!(({ requestId: rid }) => {
+        if (rid !== requestId) return
+        offChunk(); offDone(); offError()
+        resolve()
+      })
+      const offError = window.electronAPI!.onAiError!(({ requestId: rid, message }) => {
+        if (rid !== requestId) return
+        working = appendAssistantContent(working, userNodeId, `\n\nError: ${message}`)
+        setConv(working)
+        offChunk(); offDone(); offError()
+        resolve()
+      })
+      window.electronAPI!.aiChatStream(requestId, messages as any, config)
+    })
+
+    setStreaming(false)
+    requestIdRef.current = null
+    return working
+  }, [setConv, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel])
+
+  // ---- 停止生成 ----
+  const handleStop = useCallback(() => {
+    if (requestIdRef.current) {
+      window.electronAPI?.cancelAiStream(requestIdRef.current)
+      requestIdRef.current = null
+    }
+  }, [])
+
+  // ---- 发送 ----
+  const handleSend = useCallback(async (message: string) => {
     // Always add the user node first — the message must be visible
     const updated = addUserNode(conv, message, selectedText || undefined)
     setConv(updated)
@@ -39,40 +111,18 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     if (!uiState.apiEndpoint || !uiState.apiKey || !uiState.apiModel) {
       const hint = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
       setConv(addAssistantNode(updated, hint))
-      setLoading(false)
       return
     }
 
     try {
-      const messages = buildMessages(updated, updated.activeNodeId!, message, selectedText || undefined)
-
-      const config = {
-        endpoint: uiState.apiEndpoint,
-        apiKey: uiState.apiKey,
-        model: uiState.apiModel,
-      }
-
-      let reply: string
-      if (window.electronAPI?.aiChat) {
-        reply = await window.electronAPI.aiChat(messages as any, config)
-      } else {
-        reply = `[DEV MODE] AI not available. You asked: "${message}"\n\nSelected text: "${selectedText?.slice(0, 100) || 'none'}"`
-      }
-
-      const withReply = addAssistantNode(updated, reply)
-      setConv(withReply)
-
+      const withReply = await streamAi(updated, updated.activeNodeId!)
       if (window.electronAPI?.saveConversation) {
         window.electronAPI.saveConversation(withReply.id, withReply)
       }
     } catch (err: any) {
-      const errorMsg = `Error: ${err.message || 'Unknown error'}`
-      const withError = addAssistantNode(updated, errorMsg)
-      setConv(withError)
-    } finally {
-      setLoading(false)
+      setConv(replaceAssistantReply(updated, updated.activeNodeId!, `Error: ${err.message || 'Unknown error'}`))
     }
-  }, [conv, selectedText, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel, setConv])
+  }, [conv, selectedText, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel, setConv, streamAi])
 
   const handleSwitchBranch = useCallback((nodeId: string) => {
     setConv(switchBranch(conv, nodeId))
@@ -95,26 +145,6 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     }
   }, [conv])
 
-  // ---- 通用：为该 user 节点请求 AI 并覆盖/添加回复 ----
-  const requestAiForUserNode = useCallback(async (currentConv: typeof conv, userNodeId: string): Promise<typeof conv> => {
-    const userNode = currentConv.nodes[userNodeId]
-    if (!userNode) return currentConv
-    const messages = buildMessages(currentConv, userNodeId, userNode.content, userNode.selectedText)
-
-    let reply: string
-    if (window.electronAPI?.aiChat) {
-      const config = { endpoint: uiState.apiEndpoint, apiKey: uiState.apiKey, model: uiState.apiModel }
-      reply = await window.electronAPI.aiChat(messages as any, config)
-    } else {
-      reply = `[DEV MODE] AI not available. You asked: "${userNode.content.slice(0, 100)}"`
-    }
-
-    const existingReply = getAssistantReply(currentConv, userNodeId)
-    return existingReply
-      ? replaceAssistantReply(currentConv, userNodeId, reply)
-      : addAssistantNode(currentConv, reply, userNodeId)
-  }, [uiState.apiEndpoint, uiState.apiKey, uiState.apiModel])
-
   // ---- 重发 / 重新生成 ----
   const handleRegenerate = useCallback(async (nodeId: string) => {
     const node = conv.nodes[nodeId]
@@ -124,47 +154,36 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
       : (node.parentId && conv.nodes[node.parentId]?.role === 'user' ? node.parentId : null)
     if (!userNodeId) return
 
-    setLoading(true)
     try {
-      const withReply = await requestAiForUserNode(conv, userNodeId)
-      setConv(withReply)
+      const withReply = await streamAi(conv, userNodeId)
       if (window.electronAPI?.saveConversation) {
         window.electronAPI.saveConversation(withReply.id, withReply)
       }
     } catch (err: any) {
-      const errorMsg = `Error: ${err.message || 'Unknown error'}`
-      setConv(replaceAssistantReply(conv, userNodeId, errorMsg))
-    } finally {
-      setLoading(false)
+      setConv(replaceAssistantReply(conv, userNodeId, `Error: ${err.message || 'Unknown error'}`))
     }
-  }, [conv, setConv, requestAiForUserNode])
+  }, [conv, setConv, streamAi])
 
   // ---- 编辑 + 重新发送 ----
   const handleEdit = useCallback(async (nodeId: string, newText: string) => {
-    setLoading(true)
     const updated = replaceNodeContent(conv, nodeId, newText)
     setConv(updated)
 
     if (!uiState.apiEndpoint || !uiState.apiKey || !uiState.apiModel) {
       const hint = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
       setConv(addAssistantNode(updated, hint, nodeId))
-      setLoading(false)
       return
     }
 
     try {
-      const withReply = await requestAiForUserNode(updated, nodeId)
-      setConv(withReply)
+      const withReply = await streamAi(updated, nodeId)
       if (window.electronAPI?.saveConversation) {
         window.electronAPI.saveConversation(withReply.id, withReply)
       }
     } catch (err: any) {
-      const errorMsg = `Error: ${err.message || 'Unknown error'}`
-      setConv(replaceAssistantReply(updated, nodeId, errorMsg))
-    } finally {
-      setLoading(false)
+      setConv(replaceAssistantReply(updated, nodeId, `Error: ${err.message || 'Unknown error'}`))
     }
-  }, [conv, setConv, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel, requestAiForUserNode])
+  }, [conv, setConv, uiState.apiEndpoint, uiState.apiKey, uiState.apiModel, streamAi])
 
   // ---- 关闭窗口（回收 pane，对话保留在 context）----
   const handleClose = useCallback(() => {
@@ -230,7 +249,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
         <ChatView
           conv={conv}
           activeNodeId={conv.activeNodeId}
-          loading={loading}
+          loading={streaming}
           onSwitchBranch={handleSwitchBranch}
           onCopy={handleCopy}
           onRegenerate={handleRegenerate}
@@ -248,7 +267,8 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
       <ChatInput
         selectedText={selectedText}
         onSend={handleSend}
-        disabled={loading}
+        streaming={streaming}
+        onStop={handleStop}
       />
     </div>
   )

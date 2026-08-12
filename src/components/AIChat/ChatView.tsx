@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { Conversation, ChatNode } from '../../utils/conversationTree'
 import { getActivePath } from '../../utils/conversationTree'
 import { ChatBubble } from './ChatBubble'
@@ -26,6 +26,22 @@ export const ChatView = memo(function ChatView({ conv, activeNodeId, loading, on
   const activePath = getActivePath(conv)
   const activePathIds = new Set(activePath.map((n) => n.id))
   const [editingId, setEditingId] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
+
+  // 距底 ≤100px 视为"在底部"（用户焦点在底部时跟随滚动）
+  const handleScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 100
+  }
+
+  // 消息变化（发送 / 流式增长）→ 若在底部则滚到底
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+    }
+  }, [conv])
 
   const handleEditStart = (nodeId: string) => {
     setEditingId(nodeId)
@@ -41,7 +57,7 @@ export const ChatView = memo(function ChatView({ conv, activeNodeId, loading, on
   }
 
   return (
-    <div className="flex-1 overflow-y-auto py-2">
+    <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-2">
       {activePath.length === 0 && (
         <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-600">
           No messages yet. Select text in the document to start.

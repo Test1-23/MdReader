@@ -24,6 +24,8 @@ async function ensureDir(dir: string) {
 
 // ---- AI Chat ----
 
+const activeStreams = new Map<string, AbortController>()
+
 export function registerAiHandlers(ipcMain: IpcMain) {
   ipcMain.handle('ai:chat', async (_event, messages: ChatMessage[], config: ApiConfig) => {
     const url = `${config.endpoint.replace(/\/$/, '')}/chat/completions`
@@ -48,6 +50,71 @@ export function registerAiHandlers(ipcMain: IpcMain) {
 
     const data = await response.json()
     return data.choices?.[0]?.message?.content || '(empty response)'
+  })
+
+  // 流式：SSE 解析，逐块通过 IPC 事件推送到渲染进程
+  ipcMain.handle('ai:chatStream', async (event, requestId: string, messages: ChatMessage[], config: ApiConfig) => {
+    const controller = new AbortController()
+    activeStreams.set(requestId, controller)
+
+    try {
+      const url = `${config.endpoint.replace(/\/$/, '')}/chat/completions`
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages,
+          stream: true,
+        }),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        const errText = await response.text()
+        throw new Error(`AI API error ${response.status}: ${errText}`)
+      }
+      if (!response.body) throw new Error('No response body')
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data:')) continue
+          const data = trimmed.slice(5).trim()
+          if (data === '[DONE]') continue
+          try {
+            const json = JSON.parse(data)
+            const delta = json.choices?.[0]?.delta?.content
+            if (delta) event.sender.send('ai:chat-chunk', { requestId, delta })
+          } catch { /* skip partial lines */ }
+        }
+      }
+
+      event.sender.send('ai:chat-done', { requestId })
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        event.sender.send('ai:chat-error', { requestId, message: err instanceof Error ? err.message : String(err) })
+      }
+    } finally {
+      activeStreams.delete(requestId)
+    }
+  })
+
+  ipcMain.handle('ai:cancelStream', (_event, requestId: string) => {
+    activeStreams.get(requestId)?.abort()
   })
 
   // ---- Conversation Persistence ----
