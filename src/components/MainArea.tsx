@@ -1,9 +1,9 @@
-import { useAppContext } from '../context/AppContext'
+import { useLayoutContext } from '../context/AppContext'
 import { EditorGroupTree } from './EditorGroups/EditorGroupTree'
 import { EmptyState } from './EmptyState'
 
 export function MainArea() {
-  const { state } = useAppContext()
+  const { state } = useLayoutContext()
 
   if (!state.layoutRoot) {
     return (

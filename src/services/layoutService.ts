@@ -1,4 +1,4 @@
-import type { AppState, LayoutNode, OpenFile, TabEntry, SplitNode, SplitPosition } from '../types'
+import type { LayoutState, LayoutNode, OpenFile, TabEntry, SplitNode, SplitPosition } from '../types'
 import { isEditorGroup, isSplitNode } from '../types'
 import {
   findGroup,
@@ -49,7 +49,7 @@ function isCorrupted(root: LayoutNode | null): boolean {
   return false
 }
 
-function noChange(state: AppState): LayoutResult {
+function noChange(state: LayoutState): LayoutResult {
   return {
     layoutRoot: state.layoutRoot,
     activeGroupId: state.activeGroupId,
@@ -59,7 +59,7 @@ function noChange(state: AppState): LayoutResult {
   }
 }
 
-function rebuild(state: AppState): LayoutResult {
+function rebuild(state: LayoutState): LayoutResult {
   return {
     layoutRoot: null,
     activeGroupId: null,
@@ -71,7 +71,7 @@ function rebuild(state: AppState): LayoutResult {
 
 // ---- Validation ----
 
-function validate(_state: AppState, op: LayoutOperation): string | null {
+function validate(_state: LayoutState, op: LayoutOperation): string | null {
   const root = _state.layoutRoot
 
   if (op.type === 'OPEN_FILE') {
@@ -108,7 +108,7 @@ function validate(_state: AppState, op: LayoutOperation): string | null {
 // ---- Central Executor ----
 
 export function execute(
-  state: AppState,
+  state: LayoutState,
   operation: LayoutOperation
 ): LayoutResult {
   const validationError = validate(state, operation)
@@ -135,7 +135,7 @@ export function execute(
 
 // ---- Apply ----
 
-function apply(state: AppState, op: LayoutOperation): LayoutResult {
+function apply(state: LayoutState, op: LayoutOperation): LayoutResult {
   switch (op.type) {
     case 'OPEN_FILE':         return handleOpenFile(state, op)
     case 'OPEN_AND_SPLIT':    return handleOpenAndSplit(state, op)
@@ -150,7 +150,7 @@ function apply(state: AppState, op: LayoutOperation): LayoutResult {
 // ---- OPEN_FILE ----
 
 function handleOpenFile(
-  state: AppState,
+  state: LayoutState,
   op: LayoutOperation & { type: 'OPEN_FILE' }
 ): LayoutResult {
   const { file, tabId, groupId: targetGroupId } = op
@@ -189,7 +189,7 @@ function handleOpenFile(
 // ---- OPEN_AND_SPLIT ----
 
 function handleOpenAndSplit(
-  state: AppState,
+  state: LayoutState,
   op: LayoutOperation & { type: 'OPEN_AND_SPLIT' }
 ): LayoutResult {
   const { file, tabId, groupId, position } = op
@@ -212,7 +212,7 @@ function handleOpenAndSplit(
 // ---- SPLIT_GROUP ----
 
 function handleSplitGroup(
-  state: AppState,
+  state: LayoutState,
   op: LayoutOperation & { type: 'SPLIT_GROUP' }
 ): LayoutResult {
   const { groupId, position, tabId } = op
@@ -235,7 +235,7 @@ function handleSplitGroup(
 // ---- SPLIT_WITH_TAB ----
 
 function handleSplitWithTab(
-  state: AppState,
+  state: LayoutState,
   op: LayoutOperation & { type: 'SPLIT_WITH_TAB' }
 ): LayoutResult {
   const { tabId, fromGroupId, toGroupId, position } = op
@@ -254,7 +254,7 @@ function handleSplitWithTab(
 // ---- MOVE_TAB ----
 
 function handleMoveTab(
-  state: AppState,
+  state: LayoutState,
   op: LayoutOperation & { type: 'MOVE_TAB' }
 ): LayoutResult {
   const { tabId, fromGroupId, toGroupId, toIndex } = op
@@ -272,7 +272,7 @@ function handleMoveTab(
 // ---- CLOSE_TAB ----
 
 function handleCloseTab(
-  state: AppState,
+  state: LayoutState,
   op: LayoutOperation & { type: 'CLOSE_TAB' }
 ): LayoutResult {
   const { groupId, tabId } = op
@@ -322,7 +322,7 @@ function handleCloseTab(
 // ---- CLOSE_GROUP ----
 
 function handleCloseGroup(
-  state: AppState,
+  state: LayoutState,
   op: LayoutOperation & { type: 'CLOSE_GROUP' }
 ): LayoutResult {
   const { groupId } = op

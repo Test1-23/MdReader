@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import type { Conversation } from '../../utils/conversationTree'
 import { getActivePath } from '../../utils/conversationTree'
 import { computeTreeLayout, NODE_RADIUS } from '../../utils/treeLayout'
@@ -12,14 +12,15 @@ interface ChatTreeViewProps {
 
 const LABEL_MAX = 12 // 节点上只显示用户消息开头几个字
 
-export function ChatTreeView({ conv, activeNodeId, onSelectNode }: ChatTreeViewProps) {
+export const ChatTreeView = memo(function ChatTreeView({ conv, activeNodeId, onSelectNode }: ChatTreeViewProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
   const [hoveredNode, setHoveredNode] = useState<TreeLayoutNode | null>(null)
 
   const activePath = getActivePath(conv)
-  const activePathIds = new Set(activePath.map((n) => n.id))
+  const activePathIds = useMemo(() => new Set(activePath.map((n) => n.id)), [activePath])
 
-  const layout = computeTreeLayout(conv, activePathIds, collapsedIds)
+  // 布局坐标与 activePathIds 无关（仅影响边着色）— hover 只重渲染节点层，不重算布局
+  const layout = useMemo(() => computeTreeLayout(conv, collapsedIds), [conv, collapsedIds])
 
   const toggleCollapse = (nodeId: string) => {
     setCollapsedIds((prev) => {
@@ -132,15 +133,18 @@ export function ChatTreeView({ conv, activeNodeId, onSelectNode }: ChatTreeViewP
           width={layout.width}
           height={layout.height}
         >
-          {layout.edges.map((edge, i) => (
-            <path
-              key={i}
-              d={edgePath(edge.from, edge.to)}
-              stroke={edge.isActive ? '#3b82f6' : '#9ca3af'}
-              strokeWidth={edge.isActive ? 2.5 : 1.5}
-              fill="none"
-            />
-          ))}
+          {layout.edges.map((edge, i) => {
+            const isActive = activePathIds.has(edge.from.id) && activePathIds.has(edge.to.id)
+            return (
+              <path
+                key={i}
+                d={edgePath(edge.from, edge.to)}
+                stroke={isActive ? '#3b82f6' : '#9ca3af'}
+                strokeWidth={isActive ? 2.5 : 1.5}
+                fill="none"
+              />
+            )
+          })}
         </svg>
 
         {/* 节点层 */}
@@ -148,4 +152,4 @@ export function ChatTreeView({ conv, activeNodeId, onSelectNode }: ChatTreeViewP
       </div>
     </div>
   )
-}
+})

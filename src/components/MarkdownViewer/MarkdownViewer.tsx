@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { useAppContext } from '../../context/AppContext'
+import { useUIContext } from '../../context/AppContext'
 
 interface MarkdownViewerProps {
   content: string
@@ -131,7 +131,7 @@ const COMPONENTS = {
 }
 
 export function MarkdownViewer({ content }: MarkdownViewerProps) {
-  const { dispatch } = useAppContext()
+  const { dispatch } = useUIContext()
 
   const handleMouseUp = useCallback(() => {
     const selection = window.getSelection()

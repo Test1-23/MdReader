@@ -9,10 +9,15 @@ interface ChatInputProps {
 export function ChatInput({ selectedText, onSend, disabled }: ChatInputProps) {
   const [input, setInput] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const didFocus = useRef(false)
 
+  // 仅在面板首次挂载时聚焦一次 —— 划选新文本不再抢占文档焦点
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [selectedText])
+    if (!didFocus.current) {
+      inputRef.current?.focus()
+      didFocus.current = true
+    }
+  }, [])
 
   const handleSend = () => {
     const trimmed = input.trim()

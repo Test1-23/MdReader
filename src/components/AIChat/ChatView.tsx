@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import type { Conversation, ChatNode } from '../../utils/conversationTree'
 import { getActivePath } from '../../utils/conversationTree'
 import { ChatBubble } from './ChatBubble'
@@ -22,7 +22,7 @@ function getBranchEntries(conv: Conversation, nodeId: string, activePathIds: Set
     .filter((child): child is ChatNode => !!child && !activePathIds.has(child.id))
 }
 
-export function ChatView({ conv, activeNodeId, loading, onSwitchBranch, onCopy, onRegenerate, onEdit }: ChatViewProps) {
+export const ChatView = memo(function ChatView({ conv, activeNodeId, loading, onSwitchBranch, onCopy, onRegenerate, onEdit }: ChatViewProps) {
   const activePath = getActivePath(conv)
   const activePathIds = new Set(activePath.map((n) => n.id))
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -73,4 +73,4 @@ export function ChatView({ conv, activeNodeId, loading, onSwitchBranch, onCopy, 
       ))}
     </div>
   )
-}
+})

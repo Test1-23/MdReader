@@ -1,30 +1,38 @@
 import { useEffect, useRef } from 'react'
-import { useAppContext } from '../context/AppContext'
+import { useLayoutContext, useUIContext } from '../context/AppContext'
 import { useElectronAPI } from './useElectronAPI'
 import { readDroppedFile, generateTabId } from '../utils/fileReader'
 
 export function useDragDrop() {
-  const { dispatch } = useAppContext()
+  const { dispatch: layoutDispatch } = useLayoutContext()
+  const { dispatch: uiDispatch } = useUIContext()
   const { readFile, isElectron } = useElectronAPI()
   const dragCounter = useRef(0)
 
   useEffect(() => {
+    // 仅外部文件拖入（dataTransfer 含 Files）才显示全局 overlay —— 内部 tab/文件树拖拽不触发
+    const isExternalFileDrag = (e: DragEvent): boolean => {
+      return e.dataTransfer?.types?.includes('Files') ?? false
+    }
+
     const handleDragEnter = (e: DragEvent) => {
       e.preventDefault()
       e.stopPropagation()
+      if (!isExternalFileDrag(e)) return
       dragCounter.current++
       if (dragCounter.current === 1) {
-        dispatch({ type: 'SET_DRAG_OVER', payload: true })
+        uiDispatch({ type: 'SET_DRAG_OVER', payload: true })
       }
     }
 
     const handleDragLeave = (e: DragEvent) => {
       e.preventDefault()
       e.stopPropagation()
+      if (!isExternalFileDrag(e)) return
       dragCounter.current--
       if (dragCounter.current <= 0) {
         dragCounter.current = 0
-        dispatch({ type: 'SET_DRAG_OVER', payload: false })
+        uiDispatch({ type: 'SET_DRAG_OVER', payload: false })
       }
     }
 
@@ -40,7 +48,7 @@ export function useDragDrop() {
       e.preventDefault()
       e.stopPropagation()
       dragCounter.current = 0
-      dispatch({ type: 'SET_DRAG_OVER', payload: false })
+      uiDispatch({ type: 'SET_DRAG_OVER', payload: false })
 
       const files = e.dataTransfer?.files
       if (!files || files.length === 0) return
@@ -51,7 +59,7 @@ export function useDragDrop() {
       })
 
       if (mdFiles.length === 0) {
-        dispatch({ type: 'SET_ERROR', payload: 'No markdown file found in the dropped items.' })
+        uiDispatch({ type: 'SET_ERROR', payload: 'No markdown file found in the dropped items.' })
         return
       }
 
@@ -59,13 +67,13 @@ export function useDragDrop() {
         try {
           const openFile = await readDroppedFile(file, readFile, isElectron)
           if (openFile) {
-            dispatch({
+            layoutDispatch({
               type: 'OPEN_FILE',
               payload: { ...openFile, tabId: generateTabId() },
             })
           }
         } catch {
-          dispatch({ type: 'SET_ERROR', payload: 'Failed to read one of the dropped files.' })
+          uiDispatch({ type: 'SET_ERROR', payload: 'Failed to read one of the dropped files.' })
         }
       }
     }
@@ -81,5 +89,5 @@ export function useDragDrop() {
       window.removeEventListener('dragover', handleDragOver)
       window.removeEventListener('drop', handleDrop)
     }
-  }, [dispatch, readFile, isElectron])
+  }, [layoutDispatch, uiDispatch, readFile, isElectron])
 }

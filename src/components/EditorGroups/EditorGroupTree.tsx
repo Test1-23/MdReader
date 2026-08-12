@@ -1,7 +1,5 @@
-import { useCallback } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
-import { useAppContext } from '../../context/AppContext'
 import { isEditorGroup, isSplitNode } from '../../types'
 import type { LayoutNode } from '../../types'
 import { EditorGroup } from './EditorGroup'
@@ -11,25 +9,16 @@ interface EditorGroupTreeProps {
 }
 
 export function EditorGroupTree({ node }: EditorGroupTreeProps) {
-  const { dispatch } = useAppContext()
-
-  // Handle resize with captured splitId
-  const makeResizeHandler = useCallback(
-    (splitId: string) => (sizes: number[]) => {
-      dispatch({ type: 'RESIZE_SPLIT', payload: { splitId, sizes } })
-    },
-    [dispatch]
-  )
-
   if (isEditorGroup(node)) {
     return <EditorGroup group={node} />
   }
 
   if (isSplitNode(node)) {
+    // Allotment 非受控：defaultSizes 只在挂载时应用，拖动由 Allotment 内部管理，
+    // 不再通过 onChange 同步到全局 state（分屏拖动零 React 更新）
     return (
       <Allotment
         vertical={node.direction === 'vertical'}
-        onChange={makeResizeHandler(node.id)}
         defaultSizes={node.sizes}
       >
         {node.children.map((child) => (

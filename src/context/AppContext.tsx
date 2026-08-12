@@ -1,21 +1,25 @@
 import React, { createContext, useContext, useReducer } from 'react'
-import type { AppState, AppAction } from '../types'
+import type { LayoutState, LayoutAction, UIState, UIAction } from '../types'
 import { isEditorGroup, isSplitNode } from '../types'
 import {
   findGroup,
   findGroupContainingTab,
   transformNode,
-  resizeSplit,
   getFirstGroup,
   getActiveTab,
 } from '../utils/layout'
 import { execute } from '../services/layoutService'
 import type { LayoutResult } from '../services/layoutService'
 
-// ---- Initial State ----
+// ============================================================
+// 双 Context 架构：
+// - LayoutContext（低频）：布局树 / openFiles / 文件树 — 变更只重渲染布局消费者
+// - UIContext（高频）：拖拽状态 / 选中文本 / 面板 / 主题 / 设置 — 变更只重渲染 UI 消费者
+// ============================================================
 
-const initialState: AppState = {
-  activeActivity: 'files',
+// ---- Layout State ----
+
+const initialLayout: LayoutState = {
   fileTreeRoot: null,
   fileTree: null,
   sidebarLoading: false,
@@ -23,21 +27,9 @@ const initialState: AppState = {
   activeGroupId: null,
   activeTabId: null,
   openFiles: {},
-  sidebarVisible: true,
-  isDragOver: false,
-  error: null,
-  darkMode: localStorage.getItem('mdreader-dark-mode') === 'true',
-  apiEndpoint: '',
-  apiKey: '',
-  apiModel: '',
-  selectedText: null,
-  showChatPanel: false,
-  chatPosition: (localStorage.getItem('mdreader-chat-position') as 'right' | 'left' | 'bottom') || 'right',
 }
 
-// ---- Apply layoutService result to state ----
-
-function applyLayoutResult(state: AppState, result: LayoutResult): AppState {
+function applyLayoutResult(state: LayoutState, result: LayoutResult): LayoutState {
   let openFiles = { ...state.openFiles }
   if (result.openFilesToAdd) {
     openFiles = { ...openFiles, ...result.openFilesToAdd }
@@ -57,16 +49,8 @@ function applyLayoutResult(state: AppState, result: LayoutResult): AppState {
   }
 }
 
-// ---- Reducer ----
-
-function reducer(state: AppState, action: AppAction): AppState {
+function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
   switch (action.type) {
-    // ---- Activity Bar ----
-    case 'SET_ACTIVITY':
-      return { ...state, activeActivity: action.payload }
-    case 'TOGGLE_SIDEBAR':
-      return { ...state, sidebarVisible: !state.sidebarVisible }
-
     // ---- File Tree ----
     case 'SET_FILE_TREE_ROOT':
       return { ...state, fileTreeRoot: action.payload.root, fileTree: action.payload.nodes, sidebarLoading: false }
@@ -144,13 +128,33 @@ function reducer(state: AppState, action: AppAction): AppState {
       const newLayout = transformNode(state.layoutRoot, group.id, () => updatedGroup)
       return { ...state, layoutRoot: newLayout }
     }
-    case 'RESIZE_SPLIT': {
-      if (!state.layoutRoot) return state
-      const newLayout = resizeSplit(state.layoutRoot, action.payload.splitId, action.payload.sizes)
-      return { ...state, layoutRoot: newLayout }
-    }
+    default:
+      return state
+  }
+}
 
-    // ---- UI ----
+// ---- UI State ----
+
+const initialUI: UIState = {
+  activeActivity: 'files',
+  sidebarVisible: true,
+  isDragOver: false,
+  error: null,
+  darkMode: localStorage.getItem('mdreader-dark-mode') === 'true',
+  apiEndpoint: '',
+  apiKey: '',
+  apiModel: '',
+  selectedText: null,
+  showChatPanel: false,
+  chatPosition: (localStorage.getItem('mdreader-chat-position') as 'right' | 'left' | 'bottom') || 'right',
+}
+
+function uiReducer(state: UIState, action: UIAction): UIState {
+  switch (action.type) {
+    case 'SET_ACTIVITY':
+      return { ...state, activeActivity: action.payload }
+    case 'TOGGLE_SIDEBAR':
+      return { ...state, sidebarVisible: !state.sidebarVisible }
     case 'SET_DRAG_OVER':
       return { ...state, isDragOver: action.payload }
     case 'SET_ERROR':
@@ -162,8 +166,11 @@ function reducer(state: AppState, action: AppAction): AppState {
     }
     case 'SETTINGS_UPDATE':
       return { ...state, apiEndpoint: action.payload.endpoint, apiKey: action.payload.apiKey, apiModel: action.payload.model }
-    case 'SET_SELECTION':
+    case 'SET_SELECTION': {
+      // 相等性 guard：相同文本不产生新 state（防止文档内每次点击全量重渲染）
+      if (state.selectedText === action.payload.text) return state
       return { ...state, selectedText: action.payload.text, showChatPanel: action.payload.text !== null }
+    }
     case 'TOGGLE_CHAT_PANEL':
       return { ...state, showChatPanel: !state.showChatPanel }
     case 'SET_CHAT_POSITION': {
@@ -175,38 +182,53 @@ function reducer(state: AppState, action: AppAction): AppState {
   }
 }
 
-// ---- Context ----
+// ---- Contexts ----
 
-interface AppContextType {
-  state: AppState
-  dispatch: React.Dispatch<AppAction>
+interface LayoutContextType {
+  state: LayoutState
+  dispatch: React.Dispatch<LayoutAction>
 }
 
-const AppContext = createContext<AppContextType | null>(null)
+interface UIContextType {
+  state: UIState
+  dispatch: React.Dispatch<UIAction>
+}
+
+const LayoutContext = createContext<LayoutContextType | null>(null)
+const UIContext = createContext<UIContextType | null>(null)
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState)
+  const [layoutState, layoutDispatch] = useReducer(layoutReducer, initialLayout)
+  const [uiState, uiDispatch] = useReducer(uiReducer, initialUI)
 
   // Preload API config on startup so AI Chat works without opening Settings first
   React.useEffect(() => {
     if (window.electronAPI?.loadApiConfig) {
       window.electronAPI.loadApiConfig().then((config) => {
         if (config && config.endpoint) {
-          dispatch({ type: 'SETTINGS_UPDATE', payload: config })
+          uiDispatch({ type: 'SETTINGS_UPDATE', payload: config })
         }
       }).catch(() => { /* no config file */ })
     }
   }, [])
 
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
-      {children}
-    </AppContext.Provider>
+    <LayoutContext.Provider value={{ state: layoutState, dispatch: layoutDispatch }}>
+      <UIContext.Provider value={{ state: uiState, dispatch: uiDispatch }}>
+        {children}
+      </UIContext.Provider>
+    </LayoutContext.Provider>
   )
 }
 
-export function useAppContext(): AppContextType {
-  const ctx = useContext(AppContext)
-  if (!ctx) throw new Error('useAppContext must be used within AppProvider')
+export function useLayoutContext(): LayoutContextType {
+  const ctx = useContext(LayoutContext)
+  if (!ctx) throw new Error('useLayoutContext must be used within AppProvider')
+  return ctx
+}
+
+export function useUIContext(): UIContextType {
+  const ctx = useContext(UIContext)
+  if (!ctx) throw new Error('useUIContext must be used within AppProvider')
   return ctx
 }

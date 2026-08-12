@@ -1,7 +1,7 @@
-import { useAppContext } from '../context/AppContext'
+import { useUIContext } from '../context/AppContext'
 
 export function DragDropOverlay() {
-  const { state } = useAppContext()
+  const { state } = useUIContext()
 
   if (!state.isDragOver) return null
 

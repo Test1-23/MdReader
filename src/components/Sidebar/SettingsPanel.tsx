@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useAppContext } from '../../context/AppContext'
+import { useUIContext } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
 
 export function SettingsPanel() {
-  const { state, dispatch } = useAppContext()
+  const { state, dispatch } = useUIContext()
   const { isElectron } = useElectronAPI()
   const [endpoint, setEndpoint] = useState(state.apiEndpoint)
   const [apiKey, setApiKey] = useState(state.apiKey)

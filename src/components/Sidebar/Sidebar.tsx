@@ -1,10 +1,10 @@
-import { useAppContext } from '../../context/AppContext'
+import { useUIContext } from '../../context/AppContext'
 import { FileTreePanel } from './FileTreePanel'
 import { OutlinePanel } from './OutlinePanel'
 import { SettingsPanel } from './SettingsPanel'
 
 export function Sidebar() {
-  const { state, dispatch } = useAppContext()
+  const { state, dispatch } = useUIContext()
 
   return (
     <div className="w-sidebar min-w-sidebar border-r border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex flex-col overflow-hidden select-none">

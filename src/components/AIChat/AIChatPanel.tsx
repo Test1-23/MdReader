@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { useAppContext } from '../../context/AppContext'
+import { useUIContext } from '../../context/AppContext'
 import {
   createConversation, addUserNode, addAssistantNode, switchBranch, buildMessages,
   getAssistantReply, replaceNodeContent, replaceAssistantReply,
@@ -28,13 +28,14 @@ const positionClasses: Record<string, string> = {
 }
 
 export function AIChatPanel() {
-  const { state, dispatch } = useAppContext()
+  const { state, dispatch } = useUIContext()
   const [conv, setConv] = useState<Conversation>(() => createConversation())
   const [loading, setLoading] = useState(false)
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
   const [width, setWidth] = useState(loadSavedSize)
   const [height, setHeight] = useState(240)
   const dragRef = useRef<{ start: number; startSize: number; axis: 'x' | 'y' } | null>(null)
+  const rafRef = useRef<number>()
 
   const selectedText = state.selectedText
   const position = state.chatPosition
@@ -59,12 +60,22 @@ export function AIChatPanel() {
         ? Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startSize + delta))
         : Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, startSize + delta))
       dragRef.current.startSize = size
-      if (a === 'x') setWidth(size)
-      else setHeight(size)
+      // rAF 节流：每帧最多一次 setState（拖动时不再每 mousemove 全量重渲染）
+      if (rafRef.current === undefined) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = undefined
+          if (a === 'x') setWidth(size)
+          else setHeight(size)
+        })
+      }
     }
     const onUp = () => {
       const final = dragRef.current?.startSize
       dragRef.current = null
+      if (rafRef.current !== undefined) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = undefined
+      }
       if (final !== undefined) localStorage.setItem('mdreader-chat-width', String(final))
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
@@ -315,6 +326,14 @@ export function AIChatPanel() {
           title="New Chat"
         >
           +
+        </button>
+        {/* 关闭面板 */}
+        <button
+          onClick={() => dispatch({ type: 'TOGGLE_CHAT_PANEL' })}
+          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          title="Close Panel"
+        >
+          ×
         </button>
       </div>
 

@@ -1,4 +1,4 @@
-import { useAppContext } from '../../context/AppContext'
+import { useUIContext } from '../../context/AppContext'
 import type { ActivityType } from '../../types'
 
 const activities: { id: ActivityType; label: string; icon: string }[] = [
@@ -8,7 +8,7 @@ const activities: { id: ActivityType; label: string; icon: string }[] = [
 ]
 
 export function ActivityBar() {
-  const { state, dispatch } = useAppContext()
+  const { state, dispatch } = useUIContext()
 
   return (
     <div className="w-activity min-w-activity flex flex-col items-center py-2 bg-[#333333] dark:bg-gray-900 text-white select-none">

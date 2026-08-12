@@ -1,4 +1,4 @@
-import { useAppContext } from '../../context/AppContext'
+import { useLayoutContext } from '../../context/AppContext'
 import type { TabEntry } from '../../types'
 import { MarkdownViewer } from '../MarkdownViewer/MarkdownViewer'
 import { RawSourceView } from '../RawSourceView/RawSourceView'
@@ -8,7 +8,7 @@ interface GroupContentProps {
 }
 
 export function GroupContent({ tab }: GroupContentProps) {
-  const { state } = useAppContext()
+  const { state } = useLayoutContext()
   const file = state.openFiles[tab.fileId]
 
   if (!file) {

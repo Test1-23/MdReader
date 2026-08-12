@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
-import { useAppContext } from '../context/AppContext'
+import { useUIContext } from '../context/AppContext'
 
 export function ErrorBanner() {
-  const { state, dispatch } = useAppContext()
+  const { state, dispatch } = useUIContext()
 
   useEffect(() => {
     if (!state.error) return

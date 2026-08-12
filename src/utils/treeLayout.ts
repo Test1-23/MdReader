@@ -27,7 +27,6 @@ export interface TreeLayoutNode {
 export interface TreeEdge {
   from: TreeLayoutNode
   to: TreeLayoutNode
-  isActive: boolean
 }
 
 export interface TreeLayout {
@@ -51,7 +50,6 @@ export interface TreeLayout {
  */
 export function computeTreeLayout(
   conv: Conversation,
-  activePathIds: Set<string>,
   collapsedIds: Set<string>
 ): TreeLayout {
   // Single root: conv.rootId points to the first user node.
@@ -107,11 +105,7 @@ export function computeTreeLayout(
         const childRow = row + 1
         const childNode = walk(child, childColumn, childRow)
         layoutNode.children.push(childNode)
-        edges.push({
-          from: layoutNode,
-          to: childNode,
-          isActive: activePathIds.has(childNode.id) && activePathIds.has(layoutNode.id),
-        })
+        edges.push({ from: layoutNode, to: childNode })
       })
     }
 

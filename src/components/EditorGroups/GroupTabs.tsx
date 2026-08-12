@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useAppContext } from '../../context/AppContext'
+import { useLayoutContext } from '../../context/AppContext'
 import type { EditorGroup as EditorGroupType } from '../../types'
 import { GroupTab } from './GroupTab'
 
@@ -9,7 +9,7 @@ interface GroupTabsProps {
 }
 
 export function GroupTabs({ group, isActive }: GroupTabsProps) {
-  const { state, dispatch } = useAppContext()
+  const { state, dispatch } = useLayoutContext()
   const handleTabClick = useCallback(
     (tabId: string) => {
       dispatch({ type: 'SET_ACTIVE_TAB', payload: { groupId: group.id, tabId: tabId } })

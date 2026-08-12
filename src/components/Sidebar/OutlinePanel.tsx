@@ -1,9 +1,9 @@
-import { useAppContext } from '../../context/AppContext'
+import { useLayoutContext } from '../../context/AppContext'
 import { findGroupContainingTab } from '../../utils/layout'
 import type { Heading } from '../../types'
 
 export function OutlinePanel() {
-  const { state } = useAppContext()
+  const { state } = useLayoutContext()
 
   // Get the active file's headings
   const activeFileId = (() => {

@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react'
-import { useAppContext } from '../../context/AppContext'
+import { useLayoutContext, useUIContext } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
 import { generateFileId, getFileName, extractHeadings } from '../../utils/markdown'
 import type { FileTreeNode, OpenFile, FileDirEntry } from '../../types'
 
 export function FileTreePanel() {
-  const { state, dispatch } = useAppContext()
+  const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
+  const { dispatch: uiDispatch } = useUIContext()
   const { openFolderDialog, openFileDialog, readDir, readFile } = useElectronAPI()
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
 
@@ -14,7 +15,7 @@ export function FileTreePanel() {
       const folderPath = await openFolderDialog()
       if (!folderPath) return
 
-      dispatch({ type: 'SET_SIDEBAR_LOADING', payload: true })
+      layoutDispatch({ type: 'SET_SIDEBAR_LOADING', payload: true })
 
       const entries = await readDir(folderPath)
       const nodes: FileTreeNode[] = entries.map((entry: FileDirEntry) => ({
@@ -27,17 +28,17 @@ export function FileTreePanel() {
         loaded: false,
       }))
 
-      dispatch({
+      layoutDispatch({
         type: 'SET_FILE_TREE_ROOT',
         payload: { root: folderPath, nodes },
       })
 
       setExpandedDirs(new Set())
     } catch (err) {
-      dispatch({ type: 'SET_SIDEBAR_LOADING', payload: false })
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to open folder.' })
+      layoutDispatch({ type: 'SET_SIDEBAR_LOADING', payload: false })
+      uiDispatch({ type: 'SET_ERROR', payload: 'Failed to open folder.' })
     }
-  }, [openFolderDialog, readDir, dispatch])
+  }, [openFolderDialog, readDir, layoutDispatch, uiDispatch])
 
   const handleToggleDir = useCallback(async (node: FileTreeNode) => {
     if (!node.isDirectory) return
@@ -52,7 +53,7 @@ export function FileTreePanel() {
 
       // Load children if not loaded yet
       if (!node.loaded) {
-        dispatch({ type: 'SET_SIDEBAR_LOADING', payload: true })
+        layoutDispatch({ type: 'SET_SIDEBAR_LOADING', payload: true })
         try {
           const entries = await readDir(node.path)
           const children: FileTreeNode[] = entries.map((entry: FileDirEntry) => ({
@@ -64,14 +65,14 @@ export function FileTreePanel() {
             children: undefined,
             loaded: false,
           }))
-          dispatch({ type: 'SET_CHILDREN', payload: { parentPath: node.path, children } })
+          layoutDispatch({ type: 'SET_CHILDREN', payload: { parentPath: node.path, children } })
         } catch {
-          dispatch({ type: 'SET_SIDEBAR_LOADING', payload: false })
-          dispatch({ type: 'SET_ERROR', payload: `Failed to read directory: ${node.name}` })
+          layoutDispatch({ type: 'SET_SIDEBAR_LOADING', payload: false })
+          uiDispatch({ type: 'SET_ERROR', payload: `Failed to read directory: ${node.name}` })
         }
       }
     }
-  }, [expandedDirs, readDir, dispatch])
+  }, [expandedDirs, readDir, layoutDispatch, uiDispatch])
 
   const handleOpenFile = useCallback(async (filePath: string) => {
     try {
@@ -90,11 +91,11 @@ export function FileTreePanel() {
         headings,
       }
 
-      dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` } })
+      layoutDispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` } })
     } catch {
-      dispatch({ type: 'SET_ERROR', payload: `Failed to open file: ${filePath}` })
+      uiDispatch({ type: 'SET_ERROR', payload: `Failed to open file: ${filePath}` })
     }
-  }, [readFile, dispatch])
+  }, [readFile, layoutDispatch, uiDispatch])
 
   const handleOpenFileDialog = useCallback(async () => {
     try {
@@ -102,9 +103,9 @@ export function FileTreePanel() {
       if (!filePath) return
       await handleOpenFile(filePath)
     } catch {
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to open file.' })
+      uiDispatch({ type: 'SET_ERROR', payload: 'Failed to open file.' })
     }
-  }, [openFileDialog, handleOpenFile, dispatch])
+  }, [openFileDialog, handleOpenFile, uiDispatch])
 
   const renderTree = (nodes: FileTreeNode[], depth: number = 0): JSX.Element => {
     return (
@@ -187,26 +188,26 @@ export function FileTreePanel() {
 
       {/* File Tree or Empty State */}
       <div className="flex-1 overflow-y-auto py-1">
-        {state.sidebarLoading && (
+        {layoutState.sidebarLoading && (
           <div className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Loading...</div>
         )}
-        {!state.fileTree && !state.sidebarLoading && (
+        {!layoutState.fileTree && !layoutState.sidebarLoading && (
           <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
             Open a folder to browse markdown files
           </div>
         )}
-        {state.fileTree && state.fileTree.length === 0 && !state.sidebarLoading && (
+        {layoutState.fileTree && layoutState.fileTree.length === 0 && !layoutState.sidebarLoading && (
           <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
             No markdown files found in this folder
           </div>
         )}
-        {state.fileTree && state.fileTree.length > 0 && renderTree(state.fileTree)}
+        {layoutState.fileTree && layoutState.fileTree.length > 0 && renderTree(layoutState.fileTree)}
       </div>
 
       {/* Root path */}
-      {state.fileTreeRoot && (
+      {layoutState.fileTreeRoot && (
         <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500 border-t border-sidebar-border truncate">
-          {state.fileTreeRoot}
+          {layoutState.fileTreeRoot}
         </div>
       )}
     </div>

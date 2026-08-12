@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
-import { useAppContext } from '../context/AppContext'
+import { useLayoutContext } from '../context/AppContext'
 import { generateFileId, extractHeadings } from '../utils/markdown'
 import type { OpenFile } from '../types'
 
 export function usePasteHandler() {
-  const { dispatch } = useAppContext()
+  const { dispatch } = useLayoutContext()
 
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {

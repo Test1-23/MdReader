@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { AppProvider, useAppContext } from './context/AppContext'
+import { AppProvider, useLayoutContext, useUIContext } from './context/AppContext'
 import { useDragDrop } from './hooks/useDragDrop'
 import { usePasteHandler } from './hooks/usePasteHandler'
 import { AppShell } from './components/AppShell'
@@ -12,7 +12,8 @@ import { DragDropOverlay } from './components/DragDropOverlay'
 import { AIChatPanel } from './components/AIChat/AIChatPanel'
 
 function AppContent() {
-  const { state } = useAppContext()
+  const { state: layoutState } = useLayoutContext()
+  const { state } = useUIContext()
 
   // Register global event listeners
   useDragDrop()
@@ -23,7 +24,7 @@ function AppContent() {
     document.documentElement.classList.toggle('dark', state.darkMode)
   }, [state.darkMode])
 
-  const hasOpenFiles = state.layoutRoot !== null && state.openFiles && Object.keys(state.openFiles).length > 0
+  const hasOpenFiles = layoutState.layoutRoot !== null && layoutState.openFiles && Object.keys(layoutState.openFiles).length > 0
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden relative bg-white dark:bg-gray-900">

@@ -73,10 +73,10 @@ export type SplitPosition = 'left' | 'right' | 'top' | 'bottom'
 
 export type ActivityType = 'files' | 'outline' | 'settings'
 
-export interface AppState {
-  // Activity Bar
-  activeActivity: ActivityType
+export type ChatPosition = 'right' | 'left' | 'bottom'
 
+/** 低频布局状态 — 变更时只重渲染布局树消费者 */
+export interface LayoutState {
   // File system (sidebar)
   fileTreeRoot: string | null
   fileTree: FileTreeNode[] | null
@@ -89,6 +89,12 @@ export interface AppState {
 
   // Open files (keyed by fileId)
   openFiles: Record<string, OpenFile>
+}
+
+/** 高频 UI 状态 — 变更时只重渲染 UI 消费者 */
+export interface UIState {
+  // Activity Bar
+  activeActivity: ActivityType
 
   // UI state
   sidebarVisible: boolean
@@ -104,16 +110,12 @@ export interface AppState {
   // AI Chat
   selectedText: string | null
   showChatPanel: boolean
-  chatPosition: 'right' | 'left' | 'bottom'
+  chatPosition: ChatPosition
 }
 
 // ---- App Actions ----
 
-export type AppAction =
-  // Activity bar
-  | { type: 'SET_ACTIVITY'; payload: ActivityType }
-  | { type: 'TOGGLE_SIDEBAR' }
-
+export type LayoutAction =
   // File tree
   | { type: 'SET_FILE_TREE_ROOT'; payload: { root: string; nodes: FileTreeNode[] } }
   | { type: 'SET_CHILDREN'; payload: { parentPath: string; children: FileTreeNode[] } }
@@ -130,11 +132,15 @@ export type AppAction =
   | { type: 'SPLIT_WITH_TAB'; payload: { tabId: string; fromGroupId: string; toGroupId: string; position: SplitPosition } }
   | { type: 'CLOSE_GROUP'; payload: { groupId: string } }
   | { type: 'MOVE_TAB'; payload: { tabId: string; fromGroupId: string; toGroupId: string; toIndex: number } }
-  | { type: 'RESIZE_SPLIT'; payload: { splitId: string; sizes: number[] } }
   | { type: 'SET_ACTIVE_GROUP'; payload: { groupId: string } }
 
   // View
   | { type: 'TOGGLE_VIEW_MODE'; payload: { tabId: string } }
+
+export type UIAction =
+  // Activity bar
+  | { type: 'SET_ACTIVITY'; payload: ActivityType }
+  | { type: 'TOGGLE_SIDEBAR' }
 
   // UI
   | { type: 'SET_DRAG_OVER'; payload: boolean }
@@ -143,7 +149,7 @@ export type AppAction =
   | { type: 'SETTINGS_UPDATE'; payload: { endpoint: string; apiKey: string; model: string } }
   | { type: 'SET_SELECTION'; payload: { text: string | null } }
   | { type: 'TOGGLE_CHAT_PANEL' }
-  | { type: 'SET_CHAT_POSITION'; payload: 'right' | 'left' | 'bottom' }
+  | { type: 'SET_CHAT_POSITION'; payload: ChatPosition }
 
 // ---- Layout Helper ----
 

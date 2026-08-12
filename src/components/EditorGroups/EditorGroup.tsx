@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAppContext } from '../../context/AppContext'
+import { useLayoutContext, useUIContext } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
 import { readDroppedFile, generateTabId } from '../../utils/fileReader'
 import { getFileName, generateFileId, extractHeadings } from '../../utils/markdown'
@@ -12,8 +12,15 @@ type DropZone = SplitPosition | 'center' | null
 const TAB_BAR_HEIGHT = 36
 const EDGE_PCT = 20
 
-function computeZone(e: React.DragEvent<HTMLDivElement>): DropZone {
-  const rect = e.currentTarget.getBoundingClientRect()
+interface CachedRect {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+// 使用缓存的 rect 计算 zone（拖动期间窗口不 resize，避免每 dragover 一次同步布局读）
+function computeZone(e: React.DragEvent<HTMLDivElement>, rect: CachedRect): DropZone {
   const contentTop = rect.top + TAB_BAR_HEIGHT
   const contentHeight = rect.height - TAB_BAR_HEIGHT
 
@@ -43,12 +50,14 @@ interface EditorGroupProps {
 }
 
 export function EditorGroup({ group }: EditorGroupProps) {
-  const { state, dispatch } = useAppContext()
+  const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
+  const { dispatch: uiDispatch } = useUIContext()
   const { readFile, isElectron } = useElectronAPI()
-  const isActive = state.activeGroupId === group.id
+  const isActive = layoutState.activeGroupId === group.id
 
   const [dropZone, setDropZone] = useState<DropZone>(null)
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const rectRef = useRef<CachedRect | null>(null)
 
   // Clear highlight when drag ends
   useEffect(() => {
@@ -65,15 +74,21 @@ export function EditorGroup({ group }: EditorGroupProps) {
 
   const handleFocus = useCallback(() => {
     if (!isActive) {
-      dispatch({ type: 'SET_ACTIVE_GROUP', payload: { groupId: group.id } })
+      layoutDispatch({ type: 'SET_ACTIVE_GROUP', payload: { groupId: group.id } })
     }
-  }, [group.id, isActive, dispatch])
+  }, [group.id, isActive, layoutDispatch])
 
   const activeTab = group.tabs.length > 0 && group.activeTabIndex >= 0
     ? group.tabs[group.activeTabIndex]
     : null
 
   // ---- Drag handlers ----
+
+  const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    // 拖动开始时读取一次 rect 并缓存（dragover 期间窗口不 resize）
+    const r = e.currentTarget.getBoundingClientRect()
+    rectRef.current = { left: r.left, top: r.top, width: r.width, height: r.height }
+  }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -82,7 +97,11 @@ export function EditorGroup({ group }: EditorGroupProps) {
       clearTimeout(leaveTimerRef.current)
       leaveTimerRef.current = undefined
     }
-    setDropZone(computeZone(e))
+    if (!rectRef.current) {
+      const r = e.currentTarget.getBoundingClientRect()
+      rectRef.current = { left: r.left, top: r.top, width: r.width, height: r.height }
+    }
+    setDropZone(computeZone(e, rectRef.current))
   }, [])
 
   const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -95,11 +114,12 @@ export function EditorGroup({ group }: EditorGroupProps) {
     e.preventDefault()
     e.stopPropagation()
 
-    const zone = computeZone(e)
+    const zone = computeZone(e, rectRef.current ?? { left: 0, top: 0, width: 1, height: 1 })
+    rectRef.current = null
     setDropZone(null)
 
     // Hide global drag overlay
-    dispatch({ type: 'SET_DRAG_OVER', payload: false })
+    uiDispatch({ type: 'SET_DRAG_OVER', payload: false })
 
     // Edge zone → use as split position directly
     const position: SplitPosition | null =
@@ -119,7 +139,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
           try {
             const openFile = await readDroppedFile(file, readFile, isElectron)
             if (openFile) {
-              dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
+              layoutDispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
             }
           } catch { /* skip failed files */ }
         }
@@ -132,15 +152,15 @@ export function EditorGroup({ group }: EditorGroupProps) {
         if (!openFile) return
 
         if (!position) {
-          dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
+          layoutDispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId(), groupId: group.id } })
         } else {
-          dispatch({
+          layoutDispatch({
             type: 'OPEN_FILE_AND_SPLIT',
             payload: { file: openFile, tabId: generateTabId(), groupId: group.id, position },
           })
         }
       } catch {
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to read the dropped file.' })
+        uiDispatch({ type: 'SET_ERROR', payload: 'Failed to read the dropped file.' })
       }
       return
     }
@@ -161,15 +181,15 @@ export function EditorGroup({ group }: EditorGroupProps) {
         const tabId = generateTabId()
 
         if (!position) {
-          dispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId, groupId: group.id } })
+          layoutDispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId, groupId: group.id } })
         } else {
-          dispatch({
+          layoutDispatch({
             type: 'OPEN_FILE_AND_SPLIT',
             payload: { file: openFile, tabId, groupId: group.id, position },
           })
         }
       } catch {
-        dispatch({ type: 'SET_ERROR', payload: `Failed to open file: ${filePath}` })
+        uiDispatch({ type: 'SET_ERROR', payload: `Failed to open file: ${filePath}` })
       }
       return
     }
@@ -179,18 +199,18 @@ export function EditorGroup({ group }: EditorGroupProps) {
     const fromGroupId = e.dataTransfer.getData('text/from-group-id')
     if (tabId && fromGroupId) {
       if (!position) {
-        dispatch({
+        layoutDispatch({
           type: 'MOVE_TAB',
           payload: { tabId, fromGroupId, toGroupId: group.id, toIndex: group.tabs.length },
         })
       } else {
-        dispatch({
+        layoutDispatch({
           type: 'SPLIT_WITH_TAB',
           payload: { tabId, fromGroupId, toGroupId: group.id, position },
         })
       }
     }
-  }, [group.id, group.tabs.length, dispatch, readFile, isElectron])
+  }, [group.id, group.tabs.length, layoutDispatch, readFile, isElectron])
 
   // ---- Render ----
 
@@ -198,6 +218,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
     <div
       className={`h-full flex flex-col relative ${isActive ? '' : ''}`}
       onClick={handleFocus}
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -210,7 +231,7 @@ export function EditorGroup({ group }: EditorGroupProps) {
         <button
           onClick={(e) => {
             e.stopPropagation()
-            dispatch({ type: 'CLOSE_GROUP', payload: { groupId: group.id } })
+            layoutDispatch({ type: 'CLOSE_GROUP', payload: { groupId: group.id } })
           }}
           className="flex-shrink-0 w-7 flex items-center justify-center bg-gray-200 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors text-sm"
           title="Close Group"
