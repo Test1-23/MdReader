@@ -33,7 +33,7 @@ export function AIChatPanel() {
   const [width, setWidth] = useState(loadSavedSize)
   const [height, setHeight] = useState(240)
   const [dragging, setDragging] = useState(false)
-  const dragRef = useRef<{ start: number; startSize: number; axis: 'x' | 'y' } | null>(null)
+  const dragRef = useRef<{ start: number; startSize: number; axis: 'x' | 'y'; lastSize: number } | null>(null)
   const rafRef = useRef<number>()
 
   const selectedText = state.selectedText
@@ -44,34 +44,36 @@ export function AIChatPanel() {
     e.preventDefault()
     e.stopPropagation()
     setDragging(true)
+    const startSize = axis === 'x' ? width : height
     dragRef.current = {
       start: axis === 'x' ? e.clientX : e.clientY,
-      startSize: axis === 'x' ? width : height,
+      startSize, // 固定基准：拖动期间不再变化
       axis,
+      lastSize: startSize,
     }
     const onMove = (ev: MouseEvent) => {
-      if (!dragRef.current) return
-      const { start, startSize, axis: a } = dragRef.current
+      const d = dragRef.current
+      if (!d) return
       // 向面板外侧拖 = 面板变大：
       // - left/right 面板 handle 在面板内缘，向左拖（clientX 减小）应变宽
       // - bottom 面板 handle 在上缘，向上拖（clientY 减小）应变高
-      const delta = a === 'x' ? -(ev.clientX - start) : -(ev.clientY - start)
-      // 无上限：只保下限（宽度受窗口 flex 布局自然约束）
-      const size = a === 'x'
-        ? Math.max(MIN_WIDTH, startSize + delta)
-        : Math.max(MIN_HEIGHT, startSize + delta)
-      dragRef.current.startSize = size
+      const delta = d.axis === 'x' ? -(ev.clientX - d.start) : -(ev.clientY - d.start)
+      // 单一基准：size = 初始尺寸 + 绝对差值（1:1 拖动，不重复累加）
+      const size = d.axis === 'x'
+        ? Math.max(MIN_WIDTH, d.startSize + delta)
+        : Math.max(MIN_HEIGHT, d.startSize + delta)
+      d.lastSize = size
       // rAF 节流：每帧最多一次 setState（拖动时不再每 mousemove 全量重渲染）
       if (rafRef.current === undefined) {
         rafRef.current = requestAnimationFrame(() => {
           rafRef.current = undefined
-          if (a === 'x') setWidth(size)
-          else setHeight(size)
+          if (d.axis === 'x') setWidth(d.lastSize)
+          else setHeight(d.lastSize)
         })
       }
     }
     const onUp = () => {
-      const final = dragRef.current?.startSize
+      const final = dragRef.current?.lastSize
       dragRef.current = null
       setDragging(false)
       if (rafRef.current !== undefined) {
