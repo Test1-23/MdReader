@@ -1,5 +1,5 @@
-import type { LayoutState, LayoutNode, EditorGroup, OpenFile, TabEntry, SplitNode, SplitPosition } from '../types'
-import { isEditorGroup, isSplitNode } from '../types'
+import type { LayoutState, LayoutNode, EditorGroup, OpenFile, TabEntry, SplitPosition } from '../types'
+import { isSplitNode } from '../types'
 import {
   findGroup,
   findGroupContainingTab,
@@ -16,7 +16,10 @@ import {
   splitWithFile,
   moveTab,
   promoteSibling,
+  collectAllTabs,
+  assertLayoutInvariants,
 } from '../utils/layout'
+import { createId } from '../utils/fileReader'
 import { AI_WINDOW_ID } from '../utils/windowDescriptor'
 
 // ---- Operation Types ----
@@ -41,18 +44,6 @@ export interface LayoutResult {
 
 // ---- Helpers ----
 
-function collectAllTabs(node: LayoutNode): TabEntry[] {
-  if (isEditorGroup(node)) return [...node.tabs]
-  return (node as SplitNode).children.flatMap(collectAllTabs)
-}
-
-function isCorrupted(root: LayoutNode | null): boolean {
-  if (!root) return false
-  if (isSplitNode(root) && root.children.length === 0) return true
-  if (isSplitNode(root)) return root.children.some((c) => isCorrupted(c))
-  return false
-}
-
 function noChange(state: LayoutState): LayoutResult {
   return {
     layoutRoot: state.layoutRoot,
@@ -73,10 +64,21 @@ function rebuild(state: LayoutState): LayoutResult {
   }
 }
 
+// E10: shared "tree is empty → clear everything" result
+function clearAllResult(state: LayoutState, extraRemoveIds: string[]): LayoutResult {
+  return {
+    layoutRoot: null,
+    activeGroupId: null,
+    activeTabId: null,
+    openFilesToAdd: {},
+    openFilesToRemove: [...new Set([...extraRemoveIds, ...Object.keys(state.openFiles)])],
+  }
+}
+
 // ---- Validation ----
 
-function validate(_state: LayoutState, op: LayoutOperation): string | null {
-  const root = _state.layoutRoot
+function validate(state: LayoutState, op: LayoutOperation): string | null {
+  const root = state.layoutRoot
 
   // OPEN_FILE / OPEN_AI_WINDOW 允许空树（自行创建默认布局）
   if (op.type === 'OPEN_FILE' || op.type === 'OPEN_AI_WINDOW') {
@@ -91,18 +93,36 @@ function validate(_state: LayoutState, op: LayoutOperation): string | null {
   switch (op.type) {
     case 'OPEN_AND_SPLIT':
       return findGroup(root, op.groupId) ? null : `Group not found: ${op.groupId}`
-    case 'SPLIT_GROUP':
-      return findGroup(root, op.groupId) ? null : `Group not found: ${op.groupId}`
+    case 'SPLIT_GROUP': {
+      if (!findGroup(root, op.groupId)) return `Group not found: ${op.groupId}`
+      // B19a: an explicit tabId must belong to the group being split
+      if (op.tabId) {
+        const group = findGroup(root, op.groupId)!
+        if (!group.tabs.some((t) => t.id === op.tabId)) return `Tab ${op.tabId} not in group ${op.groupId}`
+      }
+      return null
+    }
     case 'SPLIT_WITH_TAB':
-      if (!findGroupContainingTab(root, op.tabId)) return `Tab not found: ${op.tabId}`
+      // B19b: the tab must live in fromGroupId, not just anywhere in the tree
+      if (findGroupContainingTab(root, op.tabId)?.id !== op.fromGroupId) {
+        return `Tab ${op.tabId} not in source group ${op.fromGroupId}`
+      }
       if (!findGroup(root, op.toGroupId)) return `Target group not found: ${op.toGroupId}`
       return null
     case 'MOVE_TAB':
-      if (!findGroupContainingTab(root, op.tabId)) return `Tab not found: ${op.tabId}`
+      // B19b: the tab must live in fromGroupId
+      if (findGroupContainingTab(root, op.tabId)?.id !== op.fromGroupId) {
+        return `Tab ${op.tabId} not in source group ${op.fromGroupId}`
+      }
       if (!findGroup(root, op.toGroupId)) return `Target group not found: ${op.toGroupId}`
       return null
-    case 'CLOSE_TAB':
-      return findGroup(root, op.groupId) ? null : `Group not found: ${op.groupId}`
+    case 'CLOSE_TAB': {
+      const group = findGroup(root, op.groupId)
+      if (!group) return `Group not found: ${op.groupId}`
+      // B8: stale/duplicated close requests must not corrupt activeTabIndex
+      if (!group.tabs.some((t) => t.id === op.tabId)) return `Tab ${op.tabId} not in group ${op.groupId}`
+      return null
+    }
     case 'CLOSE_GROUP':
       return findGroup(root, op.groupId) ? null : `Group not found: ${op.groupId}`
     default:
@@ -130,9 +150,13 @@ export function execute(
     return rebuild(state)
   }
 
-  if (isCorrupted(result.layoutRoot)) {
-    console.error('[layoutService] Tree corrupted after operation — rebuilding', operation)
-    return rebuild(state)
+  // R3/B19d: the second validation pass checks the full invariant set, not just
+  // zero-child splits. On violation, keep the previous (known-good) state
+  // instead of trusting the broken result.
+  const problems = assertLayoutInvariants(result.layoutRoot, result.activeGroupId, result.activeTabId)
+  if (problems.length > 0) {
+    console.error('[layoutService] Invariants violated after operation:', problems, operation)
+    return noChange(state)
   }
 
   return result
@@ -155,20 +179,20 @@ function apply(state: LayoutState, op: LayoutOperation): LayoutResult {
 
 // ---- OPEN_AI_WINDOW ----
 
-// 在最外层布局的最右侧创建分屏；新 split 用新 id 使 Allotment 重挂载、defaultSizes 生效
+// 在最外层布局的最右侧创建分屏；新 split 用新 id 使 Allotment 重挂载、sizes 生效
 function splitRightOfRoot(root: LayoutNode, tab: TabEntry): LayoutNode {
   const newPane: EditorGroup = { ...createEditorGroup(), tabs: [tab], activeTabIndex: 0 }
   if (isSplitNode(root) && root.direction === 'horizontal') {
     return {
       ...root,
-      id: `split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: createId('split'),
       children: [...root.children, newPane],
       sizes: [...root.sizes.map((s) => Math.round(s * 0.7)), 30],
     }
   }
   return {
     type: 'split',
-    id: `split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: createId('split'),
     direction: 'horizontal',
     children: [root, newPane],
     sizes: [70, 30],
@@ -183,8 +207,15 @@ function handleOpenAiWindow(state: LayoutState): LayoutResult {
   if (existingGroup) {
     const existingTab = existingGroup.tabs.find((t) => t.fileId === AI_WINDOW_ID)
     if (existingTab) {
+      // B7: reuse must also move the group's activeTabIndex to the AI tab —
+      // otherwise the tab bar highlights AI while the content shows another file,
+      // and the document context silently disappears.
+      const updatedGroup: EditorGroup = {
+        ...existingGroup,
+        activeTabIndex: existingGroup.tabs.findIndex((t) => t.id === existingTab.id),
+      }
       return {
-        layoutRoot: state.layoutRoot,
+        layoutRoot: transformNode(state.layoutRoot!, existingGroup.id, () => updatedGroup),
         activeGroupId: existingGroup.id,
         activeTabId: existingTab.id,
         openFilesToAdd: {},
@@ -194,7 +225,7 @@ function handleOpenAiWindow(state: LayoutState): LayoutResult {
   }
 
   const tab: TabEntry = {
-    id: `tab-ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: createId('tab-ai'),
     fileId: AI_WINDOW_ID,
     filePath: 'ai://chat',
     fileName: 'AI Chat',
@@ -299,14 +330,23 @@ function handleSplitGroup(
   const layout = state.layoutRoot!
   const newLayout = splitGroup(layout, groupId, position, tabId)
 
+  // B19a: the active tab must be the tab that was actually moved
+  // (splitGroup falls back to the group's active tab for an invalid tabId —
+  // pointing at the requested tabId would leave activeTabId dangling).
   const sourceGroup = findGroup(layout, groupId)
-  const tabToFind = tabId || sourceGroup?.tabs[sourceGroup?.activeTabIndex ?? 0]?.id
-  const newGroup = tabToFind ? findGroupContainingTab(newLayout, tabToFind) : null
+  let movedTabId: string | null = null
+  if (sourceGroup) {
+    let moveIdx = -1
+    if (tabId) moveIdx = sourceGroup.tabs.findIndex((t) => t.id === tabId)
+    if (moveIdx < 0 && sourceGroup.activeTabIndex >= 0) moveIdx = sourceGroup.activeTabIndex
+    movedTabId = sourceGroup.tabs[moveIdx]?.id ?? null
+  }
+  const newGroup = movedTabId ? findGroupContainingTab(newLayout, movedTabId) : null
 
   return {
     layoutRoot: newLayout,
     activeGroupId: newGroup?.id ?? groupId,
-    activeTabId: tabToFind ?? state.activeTabId,
+    activeTabId: movedTabId ?? state.activeTabId,
     openFilesToAdd: {},
     openFilesToRemove: [],
   }
@@ -370,7 +410,7 @@ function handleCloseTab(
     newLayout = promoteSibling(layout, groupId)
     const first = getFirstGroup(newLayout)
     newActiveGroupId = first?.id ?? null
-    newActiveTabId = first?.tabs[first?.activeTabIndex >= 0 ? first.activeTabIndex : 0]?.id ?? null
+    newActiveTabId = getActiveTab(first ?? ({} as EditorGroup))?.id ?? null
   } else {
     newLayout = transformNode(layout, groupId, () => updatedGroup)
     newActiveGroupId = groupId
@@ -386,11 +426,7 @@ function handleCloseTab(
   }
 
   if (collectAllTabs(newLayout).length === 0) {
-    return {
-      layoutRoot: null, activeGroupId: null, activeTabId: null,
-      openFilesToAdd: {},
-      openFilesToRemove: [...new Set([...removeIds, ...Object.keys(state.openFiles)])],
-    }
+    return clearAllResult(state, removeIds)
   }
 
   return {
@@ -416,18 +452,14 @@ function handleCloseGroup(
   const removeIds = closingFileIds.filter((id) => !remainingIds.has(id))
 
   if (allTabs.length === 0) {
-    return {
-      layoutRoot: null, activeGroupId: null, activeTabId: null,
-      openFilesToAdd: {},
-      openFilesToRemove: [...new Set([...removeIds, ...Object.keys(state.openFiles)])],
-    }
+    return clearAllResult(state, removeIds)
   }
 
   const first = getFirstGroup(newLayout)
   return {
     layoutRoot: newLayout,
     activeGroupId: first?.id ?? null,
-    activeTabId: first?.tabs[first?.activeTabIndex >= 0 ? first.activeTabIndex : 0]?.id ?? null,
+    activeTabId: getActiveTab(first ?? ({} as EditorGroup))?.id ?? null,
     openFilesToAdd: {}, openFilesToRemove: removeIds,
   }
 }

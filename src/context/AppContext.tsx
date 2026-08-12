@@ -33,12 +33,26 @@ const initialLayout: LayoutState = {
 }
 
 function applyLayoutResult(state: LayoutState, result: LayoutResult): LayoutState {
-  let openFiles = { ...state.openFiles }
-  if (result.openFilesToAdd) {
+  // P4: a no-op result (validation rejected, or nothing actually changed)
+  // must return the same state reference — otherwise every consumer of
+  // LayoutContext re-renders for nothing.
+  const hasAdds = Object.keys(result.openFilesToAdd ?? {}).length > 0
+  const hasRemoves = (result.openFilesToRemove?.length ?? 0) > 0
+  if (
+    result.layoutRoot === state.layoutRoot
+    && result.activeGroupId === state.activeGroupId
+    && result.activeTabId === state.activeTabId
+    && !hasAdds && !hasRemoves
+  ) {
+    return state
+  }
+
+  let openFiles = state.openFiles
+  if (hasAdds) {
     openFiles = { ...openFiles, ...result.openFilesToAdd }
   }
-  if (result.openFilesToRemove) {
-    for (const id of result.openFilesToRemove) {
+  if (hasRemoves) {
+    for (const id of result.openFilesToRemove!) {
       const { [id]: _, ...rest } = openFiles as Record<string, unknown>
       openFiles = rest as unknown as typeof openFiles
     }
@@ -116,8 +130,10 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
     case 'SET_ACTIVE_GROUP': {
       if (!state.layoutRoot) return state
       const group = findGroup(state.layoutRoot, action.payload.groupId)
-      const activeTab = group ? getActiveTab(group) : null
-      return { ...state, activeGroupId: action.payload.groupId, activeTabId: activeTab?.id ?? null }
+      // B19c: an unknown group id must not leave a dangling activeGroupId
+      if (!group) return state
+      const activeTab = getActiveTab(group)
+      return { ...state, activeGroupId: group.id, activeTabId: activeTab?.id ?? null }
     }
     case 'TOGGLE_VIEW_MODE': {
       if (!state.layoutRoot) return state
