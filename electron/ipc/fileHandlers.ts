@@ -57,6 +57,11 @@ export function registerFileHandlers(ipcMain: IpcMain) {
   ipcMain.handle(IPC_CHANNELS.FILE_READ, async (event, filePath: string) => {
     assertTrustedSender(event)
     try {
+      // S6: only paths the user explicitly opened (folder dialog / file dialog /
+      // drag-drop) may be read.
+      if (!isAuthorized(filePath)) {
+        throw new Error('File not authorized — open it via the file dialog, folder explorer, or drag & drop')
+      }
       const stats = await stat(filePath)
       // P7: reading a multi-hundred-MB log file whole + structured-cloning it
       // over IPC would OOM — reject clearly instead.
