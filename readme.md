@@ -26,8 +26,10 @@
 - Paste markdown content directly (`Ctrl+V`)
 
 ### AI Chat
-- Select text in a document to open the AI chat window
-- Selected text is sent as quoted context; the full document is included as context
+- Select text in a document → a 📎 quote bubble appears at the end of the selection; click it to quote and open/focus the AI window on the right
+- Multiple quotes accumulate as removable chips above the input and are all attached to your next message
+- 💬 button in the Activity Bar opens a NEW independent AI window split below the focused pane — each window has its own conversation and history
+- The full document is included as context
 - Streaming AI replies (SSE via Electron IPC)
 - Conversation tree with branching — backtrack to any point and create new branches
 - Git-style tree diagram visualization
@@ -97,12 +99,14 @@ npm run build
 
 ### AI Chat
 1. Click **⚙️ Settings** in the Activity Bar → configure your API endpoint, key, and model
-2. Select text in any open markdown document → the AI Chat window opens at the far right
-3. Type your question and press **Enter** or click **↑ Send**
-4. The AI receives the full document as context plus your selected text
-5. Use **🧠 Deep Think** to enable reasoning mode (DeepSeek R1)
-6. Click **🗂 Conversations** to manage saved conversations
-7. Use **🌳 Tree View** to navigate conversation branches
+2. Select text in any open markdown document → click the **📎 引用** bubble at the end of the selection — the AI window opens (or focuses) at the far right and the quote appears as a chip
+3. Select and quote more text to accumulate multiple chips; click **×** on a chip to remove it
+4. Click **💬** in the Activity Bar to open an additional independent AI window below the focused pane
+5. Type your question and press **Enter** or click **↑ Send** — all pending quotes are attached to the message
+6. The AI receives the full document as context plus your quotes
+7. Use **🧠 Deep Think** to enable reasoning mode (DeepSeek R1)
+8. Click **🗂 Conversations** to manage saved conversations
+9. Use **🌳 Tree View** to navigate conversation branches
 
 ### Keyboard Shortcuts
 

@@ -311,6 +311,10 @@ async function main(): Promise<void> {
   // ══════════════ Phase 5: renderer UI — boot, drag-drop, settings panel ══════════════
   console.log('\nPhase 5 — renderer UI')
   {
+    // reload so the renderer re-reads the API config saved in Phase 4 —
+    // the real app loads config at startup, and the UI send flow gates on it
+    win.webContents.reload()
+
     await waitFor('ActivityBar Explorer button', async () =>
       run<boolean>(`document.querySelector('[title="Explorer"]') !== null`))
 
@@ -333,6 +337,60 @@ async function main(): Promise<void> {
 
     const bold = await run<boolean>(`document.querySelector('.markdown-body strong')?.textContent === 'bold'`)
     check('GFM bold rendered', bold === true)
+
+    // ---- new interaction: selection shows a quote bubble, does NOT auto-open AI ----
+    const selectionDone = await run<boolean>(`
+      (() => {
+        const para = document.querySelector('.markdown-body p')
+        if (!para) return false
+        const range = document.createRange()
+        range.selectNodeContents(para)
+        const sel = window.getSelection()
+        sel.removeAllRanges()
+        sel.addRange(range)
+        para.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+        return true
+      })()`)
+    check('selection dispatched', selectionDone === true)
+
+    await waitFor('quote bubble appears at selection end', async () =>
+      run<boolean>(`document.querySelector('[data-quote-bubble]') !== null`))
+    const aiTabCountAfterSelect = await run<number>(`document.querySelectorAll('[title="ai://chat"]').length`)
+    check('mouseup no longer auto-opens the AI window', aiTabCountAfterSelect === 0, aiTabCountAfterSelect)
+
+    // ---- click the bubble → AI window opens (right) + chip appears ----
+    await run(`document.querySelector('[data-quote-bubble]').click()`)
+    await waitFor('AI window opens after quote click', async () =>
+      run<boolean>(`document.querySelectorAll('[title="ai://chat"]').length === 1`))
+    await waitFor('quote chip appears above the input', async () =>
+      run<boolean>(`document.body.textContent.includes('📎')`))
+    check('quote chip visible in ChatInput', true)
+
+    // ---- ActivityBar 💬 → a SECOND independent AI window under the focused pane ----
+    await run(`document.querySelector('[title="New AI Chat"]').click()`)
+    await waitFor('second AI window opens', async () =>
+      run<boolean>(`document.querySelectorAll('[title="ai://chat"]').length === 2`))
+    check('two independent AI windows coexist', true)
+
+    // ---- send from the focused window: quote attaches, chips clear, stream renders ----
+    await run(`
+      (() => {
+        const ta = document.querySelector('textarea')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+        setter.call(ta, 'hello smoke')
+        ta.dispatchEvent(new Event('input', { bubbles: true }))
+        return true
+      })()`)
+    await run(`document.querySelector('[title="发送"]').click()`)
+    await waitFor('streamed reply rendered', async () =>
+      run<boolean>(`document.body.textContent.includes('Hello from smoke server')`))
+    check('send streams a reply end-to-end', true)
+    await waitFor('quote chips cleared after send', async () =>
+      run<boolean>(`!document.body.textContent.includes('📎')`))
+    check('pending quotes cleared after send', true)
+    await waitFor('second window still shows its own empty conversation', async () =>
+      run<boolean>(`document.body.textContent.includes('No messages yet')`))
+    check('windows keep independent conversations', true)
 
     // settings panel via ActivityBar (exercises the R2 context split end-to-end)
     await run(`document.querySelector('[title="Settings"]').click()`)

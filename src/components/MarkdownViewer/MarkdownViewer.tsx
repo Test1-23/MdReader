@@ -1,10 +1,11 @@
-import { memo } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { useUIContext } from '../../context/AppContext'
+import { useUIContext, useLayoutDispatch, useUIDispatch } from '../../context/AppContext'
 import { headingToId } from '../../utils/markdown'
+import { createId } from '../../utils/fileReader'
 
 interface MarkdownViewerProps {
   content: string
@@ -134,19 +135,94 @@ const COMPONENTS = {
   blockquote: BlockquoteRenderer,
 }
 
+interface QuoteBubble {
+  x: number
+  y: number
+  text: string
+}
+
 // memo: content-identical renders skip the full ReactMarkdown parse + Prism
 // highlighting. Dispatch-only subscriptions keep this component out of layout
 // and chat churn entirely (P1/R2).
-// (Step 4 adds the floating quote bubble on selection.)
 export const MarkdownViewer = memo(function MarkdownViewer({ content }: MarkdownViewerProps) {
+  const layoutDispatch = useLayoutDispatch()
+  const uiDispatch = useUIDispatch()
+  const [bubble, setBubble] = useState<QuoteBubble | null>(null)
+
+  // 划选 → 选区末尾浮出「📎 引用」气泡（不再自动打开 AI 窗口）
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest?.('[data-quote-bubble]')) return
+    const sel = window.getSelection()
+    const text = sel?.toString()?.trim()
+    if (text && sel && sel.rangeCount > 0) {
+      const rect = sel.getRangeAt(0).getBoundingClientRect()
+      // 零面积选区（单纯点击）不显示气泡
+      if (rect.width > 0 || rect.height > 0) {
+        setBubble({
+          x: Math.min(rect.right + 6, window.innerWidth - 96),
+          y: Math.min(rect.bottom + 6, window.innerHeight - 44),
+          text,
+        })
+        return
+      }
+    }
+    setBubble(null)
+  }, [])
+
+  // 气泡消失：点击他处 / 滚动（预览在内部 overflow 容器滚动不冒泡，需 capture）/ Esc
+  useEffect(() => {
+    if (!bubble) return
+    const dismiss = (e: Event) => {
+      if ((e.target as HTMLElement).closest?.('[data-quote-bubble]')) return
+      setBubble(null)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBubble(null)
+    }
+    document.addEventListener('mousedown', dismiss, true)
+    document.addEventListener('scroll', dismiss, true)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', dismiss, true)
+      document.removeEventListener('scroll', dismiss, true)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [bubble])
+
+  const handleQuoteClick = useCallback(() => {
+    if (!bubble) return
+    uiDispatch({ type: 'ADD_QUOTE', payload: { id: createId('quote'), text: bubble.text } })
+    // 复用统一窗口逻辑：聚焦最近 AI 窗口，否则最右侧分屏
+    layoutDispatch({ type: 'OPEN_AI_WINDOW' })
+    window.getSelection()?.removeAllRanges()
+    setBubble(null)
+  }, [bubble, uiDispatch, layoutDispatch])
+
   return (
-    <div className="markdown-body max-w-4xl mx-auto px-8 py-6 bg-white dark:bg-gray-900">
+    <div
+      className="markdown-body max-w-4xl mx-auto px-8 py-6 bg-white dark:bg-gray-900"
+      onMouseUp={handleMouseUp}
+    >
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         components={COMPONENTS}
       >
         {content}
       </ReactMarkdown>
+
+      {/* 选区末尾浮动引用气泡 */}
+      {bubble && (
+        <button
+          data-quote-bubble
+          style={{ position: 'fixed', left: bubble.x, top: bubble.y, zIndex: 50 }}
+          onMouseDown={(e) => e.preventDefault() /* 保住选区直到点击 */}
+          onClick={handleQuoteClick}
+          className="px-2.5 py-1 flex items-center gap-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg text-xs transition-colors"
+          title="引用选中内容并打开 AI"
+        >
+          📎 引用
+        </button>
+      )}
     </div>
   )
 })
