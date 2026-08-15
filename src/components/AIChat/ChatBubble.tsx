@@ -125,12 +125,15 @@ export const ChatBubble = memo(function ChatBubble({
               {new Date(node.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           </div>
-          {/* 选中文本引用块 */}
-          {node.selectedText && (
-            <div className="mb-1.5 p-1.5 bg-black/10 dark:bg-white/10 rounded text-[10px] italic whitespace-pre-wrap">
-              {node.selectedText}
+          {/* 选中文本引用块（多条各自成块） */}
+          {node.selectedTexts?.map((text, i) => (
+            <div
+              key={i}
+              className="mb-1.5 p-1.5 bg-black/10 dark:bg-white/10 rounded text-[10px] italic whitespace-pre-wrap"
+            >
+              {text}
             </div>
-          )}
+          ))}
           {/* 可折叠思考块（DeepSeek 风格：粗箭头 + 耗时） */}
           {!isUser && node.reasoning && (
             <div className="mb-1.5 rounded bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">

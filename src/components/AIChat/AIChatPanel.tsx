@@ -92,7 +92,8 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     const current = convRef.current
     const settings = uiSettingsRef.current
     // Always add the user node first — the message must be visible
-    const updated = addUserNode(current, message, selectedTextRef.current || undefined)
+    // (Step 2 shim — Step 3 replaces this with the pending-quotes list)
+    const updated = addUserNode(current, message, selectedTextRef.current ? [selectedTextRef.current] : undefined)
     setConv(updated)
 
     // Missing API config → show a helpful message instead of silently failing

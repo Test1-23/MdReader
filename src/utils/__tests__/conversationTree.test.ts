@@ -29,15 +29,46 @@ describe('buildMessages', () => {
     expect(second).toHaveLength(1)
   })
 
-  it('B3: with selectedText the quoted message replaces (not duplicates) the bare one', () => {
+  it('B3: with selectedTexts the quoted message replaces (not duplicates) the bare one', () => {
     const conv = setup()
     const assistantId = conv.activeNodeId!
     const userNode = conv.nodes[conv.nodes[assistantId].parentId!]
-    const messages = buildMessages(conv, userNode.id, userNode.content, 'selected words')
+    const messages = buildMessages(conv, userNode.id, userNode.content, ['selected words'])
     const bare = messages.filter((m) => m.role === 'user' && m.content === 'Second question')
     expect(bare).toHaveLength(0)
     const quoted = messages.filter((m) => m.role === 'user' && m.content.includes('Selected text'))
     expect(quoted).toHaveLength(1)
+  })
+
+  it('multiple quotes each become their own blockquote section in one message', () => {
+    const conv = setup()
+    const assistantId = conv.activeNodeId!
+    const userNode = conv.nodes[conv.nodes[assistantId].parentId!]
+    const messages = buildMessages(conv, userNode.id, userNode.content, ['quote one', 'quote two'])
+    const userMsg = messages[messages.length - 1]
+    expect(userMsg.role).toBe('user')
+    const sections = userMsg.content.split('Selected text from document:')
+    // one section per quote + the user input tail
+    expect(sections).toHaveLength(3)
+    expect(sections[1]).toContain('> quote one')
+    expect(sections[2]).toContain('> quote two')
+    expect(sections[2]).toContain('Second question')
+  })
+
+  it('multi-line quotes are blockquoted line by line', () => {
+    const conv = setup()
+    const assistantId = conv.activeNodeId!
+    const userNode = conv.nodes[conv.nodes[assistantId].parentId!]
+    const messages = buildMessages(conv, userNode.id, userNode.content, ['line a\nline b'])
+    const userMsg = messages[messages.length - 1]
+    expect(userMsg.content).toContain('> line a\n> line b')
+  })
+
+  it('addUserNode stores selectedTexts on the node', () => {
+    const conv = createConversation('t')
+    const result = addUserNode(conv, 'question', ['quote-1', 'quote-2'])
+    const node = result.nodes[result.activeNodeId!]
+    expect(node.selectedTexts).toEqual(['quote-1', 'quote-2'])
   })
 
   it('B14: an oversized document is truncated to a bounded context', () => {
@@ -164,5 +195,35 @@ describe('normalizeConversation', () => {
     }
     const normalized = normalizeConversation(conv)
     expect(normalized.nodes[assistantId].childrenIds).not.toContain('ghost-child')
+  })
+
+  it('R6: migrates legacy selectedText (string) to selectedTexts and drops the field', () => {
+    let conv = setup()
+    const assistantId = conv.activeNodeId!
+    const userNodeId = conv.nodes[assistantId].parentId!
+    const legacyNode = { ...conv.nodes[userNodeId], selectedText: 'old quote' } as Record<string, unknown>
+    conv = {
+      ...conv,
+      nodes: { ...conv.nodes, [userNodeId]: legacyNode as never },
+    }
+    const normalized = normalizeConversation(conv)
+    const migrated = normalized.nodes[userNodeId] as unknown as Record<string, unknown>
+    expect(migrated.selectedTexts).toEqual(['old quote'])
+    expect('selectedText' in migrated).toBe(false)
+  })
+
+  it('R6: leaves existing selectedTexts untouched', () => {
+    let conv = setup()
+    const assistantId = conv.activeNodeId!
+    const userNodeId = conv.nodes[assistantId].parentId!
+    conv = {
+      ...conv,
+      nodes: {
+        ...conv.nodes,
+        [userNodeId]: { ...conv.nodes[userNodeId], selectedTexts: ['a', 'b'] },
+      },
+    }
+    const normalized = normalizeConversation(conv)
+    expect(normalized.nodes[userNodeId].selectedTexts).toEqual(['a', 'b'])
   })
 })

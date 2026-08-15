@@ -6,7 +6,8 @@ export interface ChatNode {
   content: string
   reasoning?: string // 深度思考内容（reasoning_content）
   reasoningDuration?: number // 深度思考耗时（ms）
-  selectedText?: string
+  // 多条引用内容（用户划选后点击 📎 引用累计）
+  selectedTexts?: string[]
   timestamp: number
   parentId: string | null
   childrenIds: string[]
@@ -51,7 +52,7 @@ export function createConversation(title?: string): Conversation {
 export function addUserNode(
   conv: Conversation,
   content: string,
-  selectedText?: string,
+  selectedTexts?: string[],
   parentId?: string
 ): Conversation {
   const parent = parentId || conv.activeNodeId || conv.rootId
@@ -61,7 +62,7 @@ export function addUserNode(
     id: nodeId(),
     role: 'user',
     content,
-    selectedText,
+    selectedTexts,
     timestamp: Date.now(),
     parentId: parent || null,
     childrenIds: [],
@@ -256,7 +257,7 @@ export function buildMessages(
   conv: Conversation,
   nodeId: string,
   userInput: string,
-  selectedText?: string,
+  selectedTexts?: string[],
   documentContent?: string
 ): Array<{ role: string; content: string }> {
   const path = getPath(conv, nodeId)
@@ -279,14 +280,14 @@ export function buildMessages(
     messages.push({ role: node.role, content: node.content })
   }
 
-  // Current user message with quoted selection
-  let userContent = ''
-  if (selectedText) {
-    const quoted = selectedText.split('\n').map((line) => `> ${line}`).join('\n')
-    userContent = `Selected text from document:\n${quoted}\n\n${userInput}`
-  } else {
-    userContent = userInput
-  }
+  // Current user message with quoted selections — each quote is its own block
+  const quoteBlocks = (selectedTexts ?? []).map((text) => {
+    const quoted = text.split('\n').map((line) => `> ${line}`).join('\n')
+    return `Selected text from document:\n${quoted}`
+  })
+  const userContent = quoteBlocks.length > 0
+    ? `${quoteBlocks.join('\n\n')}\n\n${userInput}`
+    : userInput
   messages.push({ role: 'user', content: userContent })
 
   return messages
@@ -312,6 +313,15 @@ export function normalizeConversation(conv: Conversation): Conversation {
 
   const nodes: Record<string, ChatNode> = {}
   for (const id of reachable) nodes[id] = conv.nodes[id]
+
+  // Migrate legacy single-quote field (selectedText: string) to selectedTexts
+  for (const id of reachable) {
+    const legacy = conv.nodes[id] as ChatNode & { selectedText?: string }
+    if (legacy.selectedText !== undefined && !legacy.selectedTexts) {
+      const { selectedText: _legacy, ...rest } = legacy
+      nodes[id] = { ...rest, selectedTexts: [legacy.selectedText] }
+    }
+  }
 
   // Prune childrenIds pointing at missing nodes
   for (const node of Object.values(nodes)) {

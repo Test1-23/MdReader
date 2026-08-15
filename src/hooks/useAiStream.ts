@@ -100,7 +100,7 @@ export function useAiStream({ setConv, getConfig, getDocContent, onStopped }: Us
       working,
       userNodeId,
       userNode.content,
-      userNode.selectedText,
+      userNode.selectedTexts,
       getDocContentRef.current?.(),
     )
     const config = getConfigRef.current()
