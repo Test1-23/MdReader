@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { persistConversation } from '../components/AIChat/conversationPersistence'
+import { persistConversation } from '../utils/conversationPersistence'
 
 /**
  * E18: debounced conversation persistence — rapid branch switches within 1s

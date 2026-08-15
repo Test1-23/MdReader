@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
+import type { PendingQuote } from '../../types'
 
 interface ChatInputProps {
-  selectedText: string | null
+  pendingQuotes: PendingQuote[]
+  onRemoveQuote: (id: string) => void
   // B16: thinking flag rides along with the message so the panel can pass it
   // through to the main process (chat_template_kwargs for DeepSeek-style models)
   onSend: (message: string, thinking: boolean) => void
@@ -9,7 +11,7 @@ interface ChatInputProps {
   onStop: () => void
 }
 
-export function ChatInput({ selectedText, onSend, streaming, onStop }: ChatInputProps) {
+export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onStop }: ChatInputProps) {
   const [input, setInput] = useState('')
   const [deepThink, setDeepThink] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -39,11 +41,28 @@ export function ChatInput({ selectedText, onSend, streaming, onStop }: ChatInput
 
   return (
     <div className="border-t border-gray-200 dark:border-gray-700 p-3">
-      {selectedText && (
-        <div className="mb-2 p-2 bg-gray-100 dark:bg-gray-800 rounded text-[10px] text-gray-500 dark:text-gray-400 max-h-16 overflow-y-auto">
-          <span className="font-semibold">📎 Selected:</span>{' '}
-          {selectedText.slice(0, 200)}
-          {selectedText.length > 200 && '...'}
+      {/* 多条引用 chip 列表（可逐条删除） */}
+      {pendingQuotes.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+          {pendingQuotes.map((quote) => (
+            <span
+              key={quote.id}
+              className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-full text-[10px] text-blue-700 dark:text-blue-300 max-w-full"
+              title={quote.text}
+            >
+              <span className="flex-shrink-0">📎</span>
+              <span className="truncate max-w-[180px]">
+                {quote.text.length > 80 ? `${quote.text.slice(0, 80)}…` : quote.text}
+              </span>
+              <button
+                onClick={() => onRemoveQuote(quote.id)}
+                className="flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-blue-500 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                title="移除引用"
+              >
+                ×
+              </button>
+            </span>
+          ))}
         </div>
       )}
       {/* 深度思考开关（输入框上方，仿 DeepSeek） */}

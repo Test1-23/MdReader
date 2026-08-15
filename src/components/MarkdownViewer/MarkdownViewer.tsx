@@ -1,9 +1,9 @@
-import { memo, useCallback } from 'react'
+import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { useUIContext, useLayoutDispatch, useUIDispatch } from '../../context/AppContext'
+import { useUIContext } from '../../context/AppContext'
 import { headingToId } from '../../utils/markdown'
 
 interface MarkdownViewerProps {
@@ -137,25 +137,10 @@ const COMPONENTS = {
 // memo: content-identical renders skip the full ReactMarkdown parse + Prism
 // highlighting. Dispatch-only subscriptions keep this component out of layout
 // and chat churn entirely (P1/R2).
+// (Step 4 adds the floating quote bubble on selection.)
 export const MarkdownViewer = memo(function MarkdownViewer({ content }: MarkdownViewerProps) {
-  const layoutDispatch = useLayoutDispatch()
-  const uiDispatch = useUIDispatch()
-
-  const handleMouseUp = useCallback(() => {
-    const selection = window.getSelection()
-    const text = selection?.toString()?.trim()
-    if (text && text.length > 0) {
-      // 呼出 AI 窗口（复用统一窗口逻辑：已存在则聚焦，否则最右侧分屏）
-      layoutDispatch({ type: 'OPEN_AI_WINDOW' })
-      uiDispatch({ type: 'SET_SELECTION', payload: { text } })
-    }
-  }, [layoutDispatch, uiDispatch])
-
   return (
-    <div
-      className="markdown-body max-w-4xl mx-auto px-8 py-6 bg-white dark:bg-gray-900"
-      onMouseUp={handleMouseUp}
-    >
+    <div className="markdown-body max-w-4xl mx-auto px-8 py-6 bg-white dark:bg-gray-900">
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         components={COMPONENTS}

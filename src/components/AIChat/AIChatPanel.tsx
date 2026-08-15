@@ -9,7 +9,7 @@ import { findGroupContainingTab } from '../../utils/layout'
 import { useAiStream } from '../../hooks/useAiStream'
 import type { ConvUpdater } from '../../hooks/useAiStream'
 import { useDebouncedPersist } from '../../hooks/useDebouncedPersist'
-import { persistConversation, loadValidatedConversation } from './conversationPersistence'
+import { persistConversation, loadValidatedConversation } from '../../utils/conversationPersistence'
 import { VIEW_BTN_INACTIVE } from '../shared/classes'
 import { ChatView } from './ChatView'
 import { ChatTreeView } from './ChatTreeView'
@@ -31,20 +31,21 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
   const deepThinkRef = useRef(false)
 
-  const selectedText = aiState.selectedText
-  const conv = aiState.aiConversation ?? createConversation()
+  // 多窗口独立对话：本窗口的对话按 tabId 键控
+  const conv = aiState.aiConversations[tabId] ?? createConversation()
 
-  // Fix 1b: 首次挂载若无对话，创建并写回 context（保证 id 稳定，不再每次渲染生成临时对话）
+  // 首次挂载领取本窗口对话：优先继承启动恢复的最后对话（原子领取），否则新建；
+  // 条目被删除（如删除他窗口打开的同一对话）时自愈重建
   useEffect(() => {
-    if (!aiState.aiConversation) {
-      aiDispatch({ type: 'SET_AI_CONVERSATION', payload: createConversation() })
+    if (!aiState.aiConversations[tabId]) {
+      aiDispatch({ type: 'CLAIM_STARTUP_CONVERSATION', payload: { tabId } })
     }
-  }, [aiState.aiConversation, aiDispatch])
+  }, [aiState.aiConversations, tabId, aiDispatch])
 
   // 函数式 setConv —— useAiStream 需要原子更新 + 会话 id 守卫（B2）
   const setConv = useCallback((updater: ConvUpdater) => {
-    aiDispatch({ type: 'SET_AI_CONVERSATION', payload: updater })
-  }, [aiDispatch])
+    aiDispatch({ type: 'SET_AI_CONVERSATION', payload: { tabId, value: updater } })
+  }, [tabId, aiDispatch])
 
   // ---- 当前文档全文（喂给 AI 的上下文）----
   const docContentRef = useRef<string | undefined>(undefined)
@@ -75,8 +76,8 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   // 全部经 ref 读取最新值，依赖数组为空，身份跨渲染恒定
   const convRef = useRef<Conversation>(conv)
   convRef.current = conv
-  const selectedTextRef = useRef(selectedText)
-  selectedTextRef.current = selectedText
+  const pendingQuotesRef = useRef(aiState.pendingQuotes)
+  pendingQuotesRef.current = aiState.pendingQuotes
   const uiSettingsRef = useRef({ endpoint: uiState.apiEndpoint, keySaved: uiState.apiKeySaved, model: uiState.apiModel })
   uiSettingsRef.current = { endpoint: uiState.apiEndpoint, keySaved: uiState.apiKeySaved, model: uiState.apiModel }
 
@@ -91,10 +92,11 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     deepThinkRef.current = thinking
     const current = convRef.current
     const settings = uiSettingsRef.current
-    // Always add the user node first — the message must be visible
-    // (Step 2 shim — Step 3 replaces this with the pending-quotes list)
-    const updated = addUserNode(current, message, selectedTextRef.current ? [selectedTextRef.current] : undefined)
+    // 多引用：所有待发引用附到本条消息，发送后清空（全局，所有窗口同步）
+    const quotes = pendingQuotesRef.current
+    const updated = addUserNode(current, message, quotes.length > 0 ? quotes.map((q) => q.text) : undefined)
     setConv(updated)
+    aiDispatch({ type: 'CLEAR_QUOTES' })
 
     // Missing API config → show a helpful message instead of silently failing
     if (!settings.endpoint || !settings.keySaved || !settings.model) {
@@ -112,7 +114,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       setConv((prev) => replaceAssistantReply(prev, updated.activeNodeId!, `Error: ${msg}`))
     }
-  }, [setConv, stream])
+  }, [setConv, stream, aiDispatch])
 
   // ---- 分支切换（B2：流式期间先取消当前流）----
   const debouncedSave = useDebouncedPersist()
@@ -182,15 +184,15 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     }
   }, [setConv, stream])
 
-  // ---- 关闭窗口（回收 pane，对话保留在 context）----
+  // ---- 关闭窗口（回收 pane；持久化由 AppContext 的 GC 效果负责——
+  // 它保存的是最新 reducer state 而非此处的渲染快照）----
   const handleClose = useCallback(() => {
     if (!layoutState.layoutRoot) return
-    if (conv.rootId) persistConversation(conv)
     const group = findGroupContainingTab(layoutState.layoutRoot, tabId)
     if (group) {
       layoutDispatch({ type: 'CLOSE_TAB', payload: { groupId: group.id, tabId } })
     }
-  }, [layoutState.layoutRoot, tabId, layoutDispatch, conv])
+  }, [layoutState.layoutRoot, tabId, layoutDispatch])
 
   // 窗口关闭前保存当前对话（P9: ref 读取最新值，流式期间不再每 chunk 重挂监听器）
   useEffect(() => {
@@ -249,12 +251,14 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const handleDeleteConversation = useCallback(async (id: string) => {
     if (convRef.current.id === id) stream.stop()
     await window.electronAPI?.deleteConversation(id)
+    // 全窗口同步：任何持有该对话的 AI 窗口都重置（claim 效果自愈新建），
+    // 防止"已删对话复活"被再次落盘
+    aiDispatch({ type: 'REMOVE_CONVERSATION_BY_ID', payload: { convId: id } })
     if (convRef.current.id === id) {
-      setConv(createConversation())
       setViewMode('chat')
     }
     refreshList()
-  }, [setConv, refreshList, stream])
+  }, [aiDispatch, refreshList, stream])
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900">
@@ -345,7 +349,8 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
 
       {/* Input */}
       <ChatInput
-        selectedText={selectedText}
+        pendingQuotes={aiState.pendingQuotes}
+        onRemoveQuote={(id) => aiDispatch({ type: 'REMOVE_QUOTE', payload: { id } })}
         onSend={handleSend}
         streaming={stream.streaming}
         onStop={handleStop}

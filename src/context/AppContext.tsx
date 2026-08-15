@@ -6,7 +6,9 @@ import {
   transformNode,
   getActiveTab,
   resizeSplit,
+  collectAllTabs,
 } from '../utils/layout'
+import { persistConversation } from '../utils/conversationPersistence'
 import { execute } from '../services/layoutService'
 import type { LayoutResult } from '../services/layoutService'
 import { createConversation, normalizeConversation } from '../utils/conversationTree'
@@ -196,8 +198,9 @@ const initialUI: UIState = {
   apiEndpoint: '',
   apiKeySaved: false,
   apiModel: '',
-  selectedText: null,
-  aiConversation: null,
+  pendingQuotes: [],
+  aiConversations: {},
+  startupConversation: null,
   conversationList: [],
 }
 
@@ -208,7 +211,7 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     case 'TOGGLE_SIDEBAR':
       return { ...state, sidebarVisible: !state.sidebarVisible }
     case 'SET_DRAG_OVER':
-      // P3: 相等性 guard（对齐 SET_SELECTION）——重复 dispatch 不再产生无效重渲染
+      // P3: 相等性 guard —— 重复 dispatch 不再产生无效重渲染
       if (state.isDragOver === action.payload) return state
       return { ...state, isDragOver: action.payload }
     case 'SET_ERROR':
@@ -220,19 +223,52 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     }
     case 'SETTINGS_UPDATE':
       return { ...state, apiEndpoint: action.payload.endpoint, apiKeySaved: action.payload.hasKey, apiModel: action.payload.model }
-    case 'SET_SELECTION': {
-      // 相等性 guard：相同文本不产生新 state（防止文档内每次点击全量重渲染）
-      if (state.selectedText === action.payload.text) return state
-      return { ...state, selectedText: action.payload.text }
-    }
+
+    // ---- Pending quotes ----
+    case 'ADD_QUOTE':
+      return { ...state, pendingQuotes: [...state.pendingQuotes, action.payload] }
+    case 'REMOVE_QUOTE':
+      return { ...state, pendingQuotes: state.pendingQuotes.filter((q) => q.id !== action.payload.id) }
+    case 'CLEAR_QUOTES':
+      return { ...state, pendingQuotes: [] }
+
+    // ---- AI conversations（按窗口 tabId 键控）----
     case 'SET_AI_CONVERSATION': {
-      const payload = action.payload
-      if (typeof payload === 'function') {
-        // R1/B2: 函数式更新 — useAiStream 依赖它做原子追加与会话 id 守卫
-        const prev = state.aiConversation ?? createConversation()
-        return { ...state, aiConversation: payload(prev) }
+      const { tabId, value } = action.payload
+      if (typeof value === 'function') {
+        // R1/B2: 函数式更新 — useAiStream 依赖它做原子追加与会话 id 守卫。
+        // 条目不存在时 no-op —— 防流式事件在窗口关闭后复活死窗口的对话。
+        const prev = state.aiConversations[tabId]
+        if (!prev) return state
+        return { ...state, aiConversations: { ...state.aiConversations, [tabId]: value(prev) } }
       }
-      return { ...state, aiConversation: payload }
+      if (value === null) {
+        const { [tabId]: _removed, ...rest } = state.aiConversations
+        return { ...state, aiConversations: rest }
+      }
+      return { ...state, aiConversations: { ...state.aiConversations, [tabId]: value } }
+    }
+    case 'REMOVE_AI_CONVERSATION': {
+      const { [action.payload.tabId]: _removed, ...rest } = state.aiConversations
+      return { ...state, aiConversations: rest }
+    }
+    case 'REMOVE_CONVERSATION_BY_ID': {
+      const aiConversations: Record<string, Conversation> = {}
+      for (const [tabId, conv] of Object.entries(state.aiConversations)) {
+        if (conv.id !== action.payload.convId) aiConversations[tabId] = conv
+      }
+      return { ...state, aiConversations }
+    }
+    case 'SET_STARTUP_CONVERSATION':
+      return { ...state, startupConversation: action.payload.conversation }
+    case 'CLAIM_STARTUP_CONVERSATION': {
+      // 原子领取：双窗口同帧挂载也只能有一个拿到启动对话
+      const conversation = state.startupConversation ?? createConversation()
+      return {
+        ...state,
+        startupConversation: null,
+        aiConversations: { ...state.aiConversations, [action.payload.tabId]: conversation },
+      }
     }
     case 'SET_CONVERSATION_LIST':
       return { ...state, conversationList: action.payload }
@@ -284,23 +320,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Fix 4: 启动时自动恢复上次对话（按 updatedAt 降序取第一条）
+  // 启动时恢复会话列表 + 最后对话（多窗口语义：首个 AI 窗口原子领取）
   React.useEffect(() => {
     if (window.electronAPI?.listConversations) {
       window.electronAPI.listConversations().then((list) => {
+        uiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
         if (list.length > 0) {
           const last = list[0]
           window.electronAPI!.loadConversation(last.id).then((data) => {
             if (data && typeof data === 'object' && 'nodes' in data && 'rootId' in data && 'id' in data) {
               // R6: 启动恢复同样走规范化，损坏数据不会破坏聊天 UI
-              uiDispatch({ type: 'SET_AI_CONVERSATION', payload: normalizeConversation(data as Conversation) })
-              uiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
+              uiDispatch({ type: 'SET_STARTUP_CONVERSATION', payload: { conversation: normalizeConversation(data as Conversation) } })
             }
           }).catch(() => {})
         }
       }).catch(() => {})
     }
   }, [])
+
+  // AI 窗口 GC：布局树中已不存在的 AI tab 对应的对话 → 先持久化再移除。
+  // 覆盖 × 关闭 / CLOSE_GROUP 等绕过面板 handleClose 的路径（最新 state 而非渲染快照）。
+  React.useEffect(() => {
+    const aiTabIds = new Set(
+      layoutState.layoutRoot
+        ? collectAllTabs(layoutState.layoutRoot).filter((t) => t.fileId === AI_WINDOW_ID).map((t) => t.id)
+        : []
+    )
+    for (const [tabId, conv] of Object.entries(uiState.aiConversations)) {
+      if (!aiTabIds.has(tabId)) {
+        persistConversation(conv)
+        uiDispatch({ type: 'REMOVE_AI_CONVERSATION', payload: { tabId } })
+      }
+    }
+  }, [layoutState.layoutRoot, uiState.aiConversations])
 
   // P1: memoized slice values — chat chunks must not rebuild the other contexts
   const uiStateValue = React.useMemo<UIStateView>(() => ({
@@ -318,10 +370,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ])
 
   const aiStateValue = React.useMemo<AIChatState>(() => ({
-    selectedText: uiState.selectedText,
-    aiConversation: uiState.aiConversation,
+    pendingQuotes: uiState.pendingQuotes,
+    aiConversations: uiState.aiConversations,
+    startupConversation: uiState.startupConversation,
     conversationList: uiState.conversationList,
-  }), [uiState.selectedText, uiState.aiConversation, uiState.conversationList])
+  }), [uiState.pendingQuotes, uiState.aiConversations, uiState.startupConversation, uiState.conversationList])
 
   return (
     <LayoutStateContext.Provider value={layoutState}>

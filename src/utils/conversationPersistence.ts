@@ -1,5 +1,5 @@
-import type { Conversation } from '../../utils/conversationTree'
-import { normalizeConversation } from '../../utils/conversationTree'
+import type { Conversation } from './conversationTree'
+import { normalizeConversation } from './conversationTree'
 
 // E2: single guarded call site for saving conversations (used 8+ places).
 export function persistConversation(conv: Conversation): void {

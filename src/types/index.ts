@@ -108,20 +108,28 @@ export interface UIState {
   apiKeySaved: boolean
   apiModel: string
 
-  // AI Chat
-  selectedText: string | null
-  aiConversation: Conversation | null
+  // AI Chat（多窗口独立对话）
+  pendingQuotes: PendingQuote[]
+  aiConversations: Record<string, Conversation> // 按 AI tabId 键控
+  startupConversation: Conversation | null // 启动恢复，首窗原子领取
   conversationList: Array<{ id: string; title: string; updatedAt: number }>
+}
+
+/** 待发送的引用内容（划选后点击 📎 引用累计） */
+export interface PendingQuote {
+  id: string
+  text: string
 }
 
 // R2: AI 状态切片 — 独立 Context，聊天每 token 更新不再触达布局/UI 消费者
 export interface AIChatState {
-  selectedText: string | null
-  aiConversation: Conversation | null
+  pendingQuotes: PendingQuote[]
+  aiConversations: Record<string, Conversation>
+  startupConversation: Conversation | null
   conversationList: Array<{ id: string; title: string; updatedAt: number }>
 }
 
-export type UIStateView = Omit<UIState, 'selectedText' | 'aiConversation' | 'conversationList'>
+export type UIStateView = Omit<UIState, 'pendingQuotes' | 'aiConversations' | 'startupConversation' | 'conversationList'>
 
 // ---- App Actions ----
 
@@ -160,9 +168,19 @@ export type UIAction =
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'TOGGLE_DARK_MODE' }
   | { type: 'SETTINGS_UPDATE'; payload: { endpoint: string; model: string; hasKey: boolean } }
-  | { type: 'SET_SELECTION'; payload: { text: string | null } }
-  // 函数式更新（R1/B2）：payload 可以是 Conversation 或 updater 函数
-  | { type: 'SET_AI_CONVERSATION'; payload: Conversation | ((prev: Conversation) => Conversation) | null }
+
+  // Pending quotes（多引用）
+  | { type: 'ADD_QUOTE'; payload: PendingQuote }
+  | { type: 'REMOVE_QUOTE'; payload: { id: string } }
+  | { type: 'CLEAR_QUOTES' }
+
+  // AI conversations（按窗口 tabId 键控）
+  // 函数式更新对不存在的 tabId 直接 no-op —— 防流式结束后复活已关闭窗口的对话
+  | { type: 'SET_AI_CONVERSATION'; payload: { tabId: string; value: Conversation | ((prev: Conversation) => Conversation) | null } }
+  | { type: 'REMOVE_AI_CONVERSATION'; payload: { tabId: string } }
+  | { type: 'REMOVE_CONVERSATION_BY_ID'; payload: { convId: string } }
+  | { type: 'SET_STARTUP_CONVERSATION'; payload: { conversation: Conversation } }
+  | { type: 'CLAIM_STARTUP_CONVERSATION'; payload: { tabId: string } }
   | { type: 'SET_CONVERSATION_LIST'; payload: Array<{ id: string; title: string; updatedAt: number }> }
 
 // ---- Layout Helper ----
