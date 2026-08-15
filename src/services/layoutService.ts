@@ -18,6 +18,7 @@ import {
   promoteSibling,
   collectAllTabs,
   assertLayoutInvariants,
+  makeSplitPair,
 } from '../utils/layout'
 import { createId } from '../utils/fileReader'
 import { AI_WINDOW_ID } from '../utils/windowDescriptor'
@@ -26,6 +27,7 @@ import { AI_WINDOW_ID } from '../utils/windowDescriptor'
 
 export type LayoutOperation =
   | { type: 'OPEN_AI_WINDOW' }
+  | { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }
   | { type: 'OPEN_FILE'; file: OpenFile; tabId: string; groupId?: string }
   | { type: 'OPEN_AND_SPLIT'; file: OpenFile; tabId: string; groupId: string; position: SplitPosition }
   | { type: 'SPLIT_GROUP'; groupId: string; position: SplitPosition; tabId?: string }
@@ -80,8 +82,8 @@ function clearAllResult(state: LayoutState, extraRemoveIds: string[]): LayoutRes
 function validate(state: LayoutState, op: LayoutOperation): string | null {
   const root = state.layoutRoot
 
-  // OPEN_FILE / OPEN_AI_WINDOW 允许空树（自行创建默认布局）
-  if (op.type === 'OPEN_FILE' || op.type === 'OPEN_AI_WINDOW') {
+  // OPEN_FILE / OPEN_AI_WINDOW / OPEN_AI_WINDOW_BELOW_FOCUS 允许空树（自行创建默认布局）
+  if (op.type === 'OPEN_FILE' || op.type === 'OPEN_AI_WINDOW' || op.type === 'OPEN_AI_WINDOW_BELOW_FOCUS') {
     if (op.type === 'OPEN_FILE' && op.groupId && root && !findGroup(root, op.groupId)) {
       return `Group not found: ${op.groupId}`
     }
@@ -167,6 +169,7 @@ export function execute(
 function apply(state: LayoutState, op: LayoutOperation): LayoutResult {
   switch (op.type) {
     case 'OPEN_AI_WINDOW':    return handleOpenAiWindow(state)
+    case 'OPEN_AI_WINDOW_BELOW_FOCUS': return handleOpenAiWindowBelowFocus(state)
     case 'OPEN_FILE':         return handleOpenFile(state, op)
     case 'OPEN_AND_SPLIT':    return handleOpenAndSplit(state, op)
     case 'SPLIT_GROUP':       return handleSplitGroup(state, op)
@@ -199,38 +202,44 @@ function splitRightOfRoot(root: LayoutNode, tab: TabEntry): LayoutNode {
   }
 }
 
+// 多窗口下"聚焦已有 AI 窗口"的公共分支：更新该组 activeTabIndex 到目标 tab
+// （B7 修复同款逻辑）
+function focusAiTab(state: LayoutState, group: EditorGroup, tab: TabEntry): LayoutResult {
+  const updatedGroup: EditorGroup = {
+    ...group,
+    activeTabIndex: group.tabs.findIndex((t) => t.id === tab.id),
+  }
+  return {
+    layoutRoot: transformNode(state.layoutRoot!, group.id, () => updatedGroup),
+    activeGroupId: group.id,
+    activeTabId: tab.id,
+    openFilesToAdd: {},
+    openFilesToRemove: [],
+  }
+}
+
 function handleOpenAiWindow(state: LayoutState): LayoutResult {
-  // 1. 已存在（按 AI_WINDOW_ID 全树查找）→ 激活
+  // 1a. 多窗口语义：优先聚焦"最近聚焦过的 AI 窗口"
+  if (state.layoutRoot && state.lastAiTabId) {
+    const lastGroup = findGroupContainingTab(state.layoutRoot, state.lastAiTabId)
+    const lastTab = lastGroup?.tabs.find((t) => t.id === state.lastAiTabId)
+    if (lastGroup && lastTab && lastTab.fileId === AI_WINDOW_ID) {
+      return focusAiTab(state, lastGroup, lastTab)
+    }
+  }
+
+  // 1b. 已存在（按 AI_WINDOW_ID 全树查找）→ 激活
   const existingGroup = state.layoutRoot
     ? findGroupContainingFileId(state.layoutRoot, AI_WINDOW_ID)
     : null
   if (existingGroup) {
     const existingTab = existingGroup.tabs.find((t) => t.fileId === AI_WINDOW_ID)
     if (existingTab) {
-      // B7: reuse must also move the group's activeTabIndex to the AI tab —
-      // otherwise the tab bar highlights AI while the content shows another file,
-      // and the document context silently disappears.
-      const updatedGroup: EditorGroup = {
-        ...existingGroup,
-        activeTabIndex: existingGroup.tabs.findIndex((t) => t.id === existingTab.id),
-      }
-      return {
-        layoutRoot: transformNode(state.layoutRoot!, existingGroup.id, () => updatedGroup),
-        activeGroupId: existingGroup.id,
-        activeTabId: existingTab.id,
-        openFilesToAdd: {},
-        openFilesToRemove: [],
-      }
+      return focusAiTab(state, existingGroup, existingTab)
     }
   }
 
-  const tab: TabEntry = {
-    id: createId('tab-ai'),
-    fileId: AI_WINDOW_ID,
-    filePath: 'ai://chat',
-    fileName: 'AI Chat',
-    viewMode: 'preview',
-  }
+  const tab = makeAiTab()
 
   // 2. 无布局 → 默认布局
   if (!state.layoutRoot) {
@@ -249,6 +258,57 @@ function handleOpenAiWindow(state: LayoutState): LayoutResult {
   // 3. 最右侧分屏
   const newLayout = splitRightOfRoot(state.layoutRoot, tab)
   const newGroup = findGroupContainingTab(newLayout, tab.id)
+  return {
+    layoutRoot: newLayout,
+    activeGroupId: newGroup?.id ?? null,
+    activeTabId: tab.id,
+    openFilesToAdd: {},
+    openFilesToRemove: [],
+  }
+}
+
+// ---- OPEN_AI_WINDOW_BELOW_FOCUS（ActivityBar 💬：总是新建，分屏在焦点组下方）----
+
+function makeAiTab(): TabEntry {
+  return {
+    id: createId('tab-ai'),
+    fileId: AI_WINDOW_ID,
+    filePath: 'ai://chat',
+    fileName: 'AI Chat',
+    viewMode: 'preview',
+  }
+}
+
+function handleOpenAiWindowBelowFocus(state: LayoutState): LayoutResult {
+  const tab = makeAiTab()
+
+  // 空布局 → 默认布局（与 handleOpenAiWindow 一致）
+  if (!state.layoutRoot) {
+    const layout = createDefaultLayout()
+    const group = getFirstGroup(layout)!
+    const updated = addTabToGroup(group, tab)
+    return {
+      layoutRoot: transformNode(layout, group.id, () => updated),
+      activeGroupId: group.id,
+      activeTabId: tab.id,
+      openFilesToAdd: {},
+      openFilesToRemove: [],
+    }
+  }
+
+  // 焦点组（失效则回退第一个组）
+  const root = state.layoutRoot
+  const targetGroupId =
+    (state.activeGroupId && findGroup(root, state.activeGroupId) ? state.activeGroupId : null)
+    ?? getFirstGroup(root)?.id
+  if (!targetGroupId) return noChange(state)
+
+  // 不做 fileId 去重：AI tab 共享 AI_WINDOW_ID，去重会吞掉新窗口。
+  // 新 pane 只含新 tab，同一组内仍满足 fileId 唯一不变量。
+  const newLayout = transformNode(root, targetGroupId, (group) =>
+    makeSplitPair(group, tab, 'bottom', [70, 30]))
+  const newGroup = findGroupContainingTab(newLayout, tab.id)
+
   return {
     layoutRoot: newLayout,
     activeGroupId: newGroup?.id ?? null,

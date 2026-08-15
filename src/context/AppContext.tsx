@@ -11,6 +11,7 @@ import { execute } from '../services/layoutService'
 import type { LayoutResult } from '../services/layoutService'
 import { createConversation, normalizeConversation } from '../utils/conversationTree'
 import type { Conversation } from '../utils/conversationTree'
+import { AI_WINDOW_ID } from '../utils/windowDescriptor'
 
 // ============================================================
 // 双 Context 架构：
@@ -27,6 +28,7 @@ const initialLayout: LayoutState = {
   layoutRoot: null,
   activeGroupId: null,
   activeTabId: null,
+  lastAiTabId: null,
   openFiles: {},
 }
 
@@ -55,12 +57,24 @@ function applyLayoutResult(state: LayoutState, result: LayoutResult): LayoutStat
       openFiles = rest as unknown as typeof openFiles
     }
   }
+
+  // 最近聚焦的 AI 窗口：任何操作把激活 tab 切到 AI 窗口时记录
+  let lastAiTabId = state.lastAiTabId
+  if (result.layoutRoot && result.activeTabId) {
+    const activeGroup = findGroupContainingTab(result.layoutRoot, result.activeTabId)
+    const activeTab = activeGroup?.tabs.find((t) => t.id === result.activeTabId)
+    if (activeTab?.fileId === AI_WINDOW_ID) {
+      lastAiTabId = activeTab.id
+    }
+  }
+
   return {
     ...state,
     layoutRoot: result.layoutRoot,
     openFiles,
     activeGroupId: result.activeGroupId,
     activeTabId: result.activeTabId,
+    lastAiTabId,
   }
 }
 
@@ -84,6 +98,8 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
     // ---- Layout operations (delegated to layoutService) ----
     case 'OPEN_AI_WINDOW':
       return applyLayoutResult(state, execute(state, { type: 'OPEN_AI_WINDOW' }))
+    case 'OPEN_AI_WINDOW_BELOW_FOCUS':
+      return applyLayoutResult(state, execute(state, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }))
     case 'OPEN_FILE': {
       const { tabId, groupId, ...file } = action.payload
       return applyLayoutResult(state, execute(state, { type: 'OPEN_FILE', file, tabId, groupId }))
@@ -123,7 +139,14 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       if (tabIdx < 0) return state
       const updatedGroup = { ...group, activeTabIndex: tabIdx }
       const newLayout = transformNode(state.layoutRoot, groupId, () => updatedGroup)
-      return { ...state, layoutRoot: newLayout, activeGroupId: groupId, activeTabId: tabId }
+      const activatedTab = group.tabs[tabIdx]
+      return {
+        ...state,
+        layoutRoot: newLayout,
+        activeGroupId: groupId,
+        activeTabId: tabId,
+        lastAiTabId: activatedTab?.fileId === AI_WINDOW_ID ? tabId : state.lastAiTabId,
+      }
     }
     case 'SET_ACTIVE_GROUP': {
       if (!state.layoutRoot) return state
@@ -131,7 +154,12 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       // B19c: an unknown group id must not leave a dangling activeGroupId
       if (!group) return state
       const activeTab = getActiveTab(group)
-      return { ...state, activeGroupId: group.id, activeTabId: activeTab?.id ?? null }
+      return {
+        ...state,
+        activeGroupId: group.id,
+        activeTabId: activeTab?.id ?? null,
+        lastAiTabId: activeTab?.fileId === AI_WINDOW_ID ? activeTab.id : state.lastAiTabId,
+      }
     }
     case 'TOGGLE_VIEW_MODE': {
       if (!state.layoutRoot) return state

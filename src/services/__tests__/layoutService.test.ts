@@ -18,7 +18,7 @@ function openFile(fileId: string): OpenFile {
 function emptyState(): LayoutState {
   return {
     fileTreeRoot: null, fileTree: null, sidebarLoading: false,
-    layoutRoot: null, activeGroupId: null, activeTabId: null, openFiles: {},
+    layoutRoot: null, activeGroupId: null, activeTabId: null, lastAiTabId: null, openFiles: {},
   }
 }
 
@@ -31,11 +31,19 @@ function toState(prev: LayoutState, result: LayoutResult): LayoutState {
       openFiles = rest as unknown as typeof openFiles
     }
   }
+  // mirror applyLayoutResult's lastAiTabId maintenance
+  let lastAiTabId = prev.lastAiTabId
+  if (result.layoutRoot && result.activeTabId) {
+    const activeGroup = findGroupContainingTab(result.layoutRoot, result.activeTabId)
+    const activeTab = activeGroup?.tabs.find((t) => t.id === result.activeTabId)
+    if (activeTab?.fileId === AI_WINDOW_ID) lastAiTabId = activeTab.id
+  }
   return {
     fileTreeRoot: prev.fileTreeRoot, fileTree: prev.fileTree, sidebarLoading: prev.sidebarLoading,
     layoutRoot: result.layoutRoot,
     activeGroupId: result.activeGroupId,
     activeTabId: result.activeTabId,
+    lastAiTabId,
     openFiles,
   }
 }
@@ -97,6 +105,103 @@ describe('OPEN_AI_WINDOW', () => {
     expect(activeTab.fileId).toBe(AI_WINDOW_ID)
     expect(activeTab.id).toBe(aiTab.id)
     expect(groupAfter.activeTabIndex).toBe(groupAfter.tabs.findIndex((t) => t.fileId === AI_WINDOW_ID))
+  })
+})
+
+describe('OPEN_AI_WINDOW_BELOW_FOCUS', () => {
+  it('splits below the focused group and activates the new AI tab', () => {
+    let state = openFileOp(emptyState(), 'a')
+    const focusGroupId = state.activeGroupId!
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }))
+    expect(state.layoutRoot).not.toBeNull()
+    expect(state.activeTabId).not.toBeNull()
+    const aiGroup = findGroupContainingTab(state.layoutRoot!, state.activeTabId!)!
+    // the new pane is a vertical split below the focused group, second child
+    expect(state.layoutRoot!.type).toBe('split')
+    if (state.layoutRoot!.type === 'split') {
+      expect(state.layoutRoot!.direction).toBe('vertical')
+      expect(state.layoutRoot!.children[0].id).toBe(focusGroupId)
+      expect(state.layoutRoot!.children[1].id).toBe(aiGroup.id)
+      expect(state.layoutRoot!.sizes).toEqual([70, 30])
+    }
+    // the focused group keeps its tabs
+    const focusGroup = findGroup(state.layoutRoot!, focusGroupId)!
+    expect(collectAllTabs(focusGroup).length).toBe(1)
+    expect(getActiveTab(aiGroup)!.fileId).toBe(AI_WINDOW_ID)
+    expect(state.lastAiTabId).toBe(state.activeTabId)
+  })
+
+  it('creates a default layout with the AI tab when the tree is empty', () => {
+    const result = execute(emptyState(), { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' })
+    expect(result.layoutRoot).not.toBeNull()
+    expect(result.activeTabId).not.toBeNull()
+    expect(collectAllTabs(result.layoutRoot!).some((t) => t.fileId === AI_WINDOW_ID)).toBe(true)
+  })
+
+  it('falls back to the first group when activeGroupId is stale', () => {
+    const state = openFileOp(emptyState(), 'a')
+    const stale = { ...state, activeGroupId: 'ghost-group' }
+    const result = execute(stale, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' })
+    expect(result.layoutRoot).not.toBeNull()
+    expect(result.activeTabId).not.toBeNull()
+  })
+
+  it('always creates a second window even when an AI window already exists', () => {
+    let state = openFileOp(emptyState(), 'a')
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW' }))
+    const aiTabIdsBefore = collectAllTabs(state.layoutRoot!).filter((t) => t.fileId === AI_WINDOW_ID).map((t) => t.id)
+    expect(aiTabIdsBefore).toHaveLength(1)
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }))
+    const aiTabIdsAfter = collectAllTabs(state.layoutRoot!).filter((t) => t.fileId === AI_WINDOW_ID).map((t) => t.id)
+    expect(aiTabIdsAfter).toHaveLength(2)
+  })
+})
+
+describe('OPEN_AI_WINDOW focus preference', () => {
+  it('focuses the most recently focused AI window when several exist', () => {
+    let state = openFileOp(emptyState(), 'a')
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }))
+    const firstAiTabId = state.activeTabId!
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }))
+    const secondAiTabId = state.activeTabId!
+    expect(firstAiTabId).not.toBe(secondAiTabId)
+    expect(state.lastAiTabId).toBe(secondAiTabId)
+
+    // switch focus back to the FIRST AI window, then quote-flow must re-focus it
+    const firstGroup = findGroupContainingTab(state.layoutRoot!, firstAiTabId)!
+    state = {
+      ...state,
+      layoutRoot: setGroupActive(state.layoutRoot!, firstGroup.id, firstGroup.tabs.findIndex((t) => t.id === firstAiTabId)),
+      activeGroupId: firstGroup.id,
+      activeTabId: firstAiTabId,
+      lastAiTabId: firstAiTabId,
+    }
+    const reopened = execute(state, { type: 'OPEN_AI_WINDOW' })
+    expect(reopened.activeTabId).toBe(firstAiTabId)
+    expect(reopened.layoutRoot).not.toBe(state.layoutRoot) // activeTabIndex updated
+  })
+
+  it('falls back to the remaining AI window when lastAiTabId is stale', () => {
+    let state = openFileOp(emptyState(), 'a')
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW' }))
+    const onlyAiTabId = state.activeTabId!
+    const stale = { ...state, lastAiTabId: 'closed-tab' }
+    const result = execute(stale, { type: 'OPEN_AI_WINDOW' })
+    expect(result.activeTabId).toBe(onlyAiTabId)
+  })
+})
+
+describe('MOVE_TAB with two AI windows', () => {
+  it('moving an AI tab into a group that already has one is a silent no-op', () => {
+    let state = openFileOp(emptyState(), 'a')
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW' }))
+    const aiTabId = state.activeTabId!
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }))
+    // both AI windows are in different groups now; move the first into the second's group
+    const targetGroup = findGroupContainingTab(state.layoutRoot!, state.activeTabId!)!
+    const result = execute(state, { type: 'MOVE_TAB', tabId: aiTabId, fromGroupId: findGroupContainingTab(state.layoutRoot!, aiTabId)!.id, toGroupId: targetGroup.id, toIndex: 0 })
+    // B9 dedup + invariant rejection → state unchanged (accepted semantics)
+    expect(result.layoutRoot).toBe(state.layoutRoot)
   })
 })
 

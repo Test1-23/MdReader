@@ -85,6 +85,8 @@ export interface LayoutState {
   layoutRoot: LayoutNode | null
   activeGroupId: string | null
   activeTabId: string | null
+  // 最近聚焦过的 AI 窗口 tab —— 划选引用打开时优先聚焦它
+  lastAiTabId: string | null
 
   // Open files (keyed by fileId)
   openFiles: Record<string, OpenFile>
@@ -136,6 +138,7 @@ export type LayoutAction =
 
   // Editor group operations
   | { type: 'OPEN_AI_WINDOW' }
+  | { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }
   | { type: 'SPLIT_GROUP'; payload: { groupId: string; position: SplitPosition; tabId?: string } }
   | { type: 'OPEN_FILE_AND_SPLIT'; payload: { file: OpenFile; tabId: string; groupId: string; position: SplitPosition } }
   | { type: 'SPLIT_WITH_TAB'; payload: { tabId: string; fromGroupId: string; toGroupId: string; position: SplitPosition } }

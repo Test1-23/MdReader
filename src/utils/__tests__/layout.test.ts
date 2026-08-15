@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   createEditorGroup, addTabToGroup, removeTabById, removeTabFromGroup,
-  splitGroup, splitWithTab, moveTab, promoteSibling,
+  splitGroup, splitWithTab, moveTab, promoteSibling, makeSplitPair,
   transformNode, collectAllTabs, assertLayoutInvariants, findGroup, getActiveTab,
 } from '../layout'
 import { isSplitNode } from '../../types'
@@ -209,6 +209,38 @@ describe('assertLayoutInvariants', () => {
   it('passes a healthy tree', () => {
     const g = groupWith(tab('a', 'file-a'))
     expect(assertLayoutInvariants(g, g.id, 'a')).toEqual([])
+  })
+})
+
+describe('makeSplitPair', () => {
+  it('bottom puts the original group first, new pane second', () => {
+    const g = groupWith(tab('a', 'file-a'))
+    const result = makeSplitPair(g, tab('ai', 'ai-file'), 'bottom')
+    expect(result.direction).toBe('vertical')
+    expect(result.children[0].id).toBe(g.id)
+    expect(result.children[1].id).not.toBe(g.id)
+    expect(collectAllTabs(result.children[1]).map((t) => t.id)).toEqual(['ai'])
+  })
+
+  it('right puts the new pane on the right (second child)', () => {
+    const g = groupWith(tab('a', 'file-a'))
+    const result = makeSplitPair(g, tab('ai', 'ai-file'), 'right')
+    expect(result.direction).toBe('horizontal')
+    expect(result.children[0].id).toBe(g.id)
+    expect(collectAllTabs(result.children[1]).map((t) => t.id)).toEqual(['ai'])
+  })
+
+  it('honors custom sizes and defaults to [50, 50]', () => {
+    const g = groupWith(tab('a', 'file-a'))
+    expect(makeSplitPair(g, tab('b', 'file-b'), 'right').sizes).toEqual([50, 50])
+    expect(makeSplitPair(g, tab('b', 'file-b'), 'bottom', [70, 30]).sizes).toEqual([70, 30])
+  })
+
+  it('does not dedup by fileId (AI tabs share AI_WINDOW_ID)', () => {
+    const g = groupWith(tab('ai-1', 'ai-window'))
+    const result = makeSplitPair(g, tab('ai-2', 'ai-window'), 'bottom')
+    const tabs = collectAllTabs(result)
+    expect(tabs.map((t) => t.id).sort()).toEqual(['ai-1', 'ai-2'])
   })
 })
 

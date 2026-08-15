@@ -93,8 +93,14 @@ export function getActiveTab(group: EditorGroup): TabEntry | null {
 
 // ---- Split Construction (E5) ----
 
-// 把 movedTab 放进新 pane，与原组构成一对 split（splitGroup / splitWithFile 共用）
-function makeSplitPair(origGroup: EditorGroup, movedTab: TabEntry, position: SplitPosition): SplitNode {
+// 把 movedTab 放进新 pane，与原组构成一对 split（splitGroup / splitWithFile /
+// OPEN_AI_WINDOW_BELOW_FOCUS 共用）
+export function makeSplitPair(
+  origGroup: EditorGroup,
+  movedTab: TabEntry,
+  position: SplitPosition,
+  sizes: [number, number] = [50, 50]
+): SplitNode {
   const direction = posDir(position)
   const newGroupFirst = posNewFirst(position)
   const newPane: EditorGroup = { ...createEditorGroup(), tabs: [movedTab], activeTabIndex: 0 }
@@ -103,7 +109,7 @@ function makeSplitPair(origGroup: EditorGroup, movedTab: TabEntry, position: Spl
     id: newId('split'),
     direction,
     children: newGroupFirst ? [newPane, origGroup] : [origGroup, newPane],
-    sizes: [50, 50],
+    sizes,
   }
 }
 
