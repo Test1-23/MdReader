@@ -298,9 +298,22 @@ function handleOpenAiWindowBelowFocus(state: LayoutState): LayoutResult {
 
   // 焦点组（失效则回退第一个组）
   const root = state.layoutRoot
-  const targetGroupId =
+  // 根因修复：划选引用流会把 activeGroupId 抢到 AI 窗口——直接用它做锚点会让
+  // 新窗堆叠在原 AI 窗口下方。活跃组是 AI 窗口时，锚定用户最后工作的非 AI 组
+  // （连续点 💬 也始终锚定同一文档组，而非上一个 AI 窗）。
+  let targetGroupId =
     (state.activeGroupId && findGroup(root, state.activeGroupId) ? state.activeGroupId : null)
     ?? getFirstGroup(root)?.id
+  if (targetGroupId) {
+    const activeGroup = findGroup(root, targetGroupId)!
+    const activeTab = getActiveTab(activeGroup)
+    if (activeTab?.fileId === AI_WINDOW_ID) {
+      const anchor =
+        (state.lastFileGroupId && findGroup(root, state.lastFileGroupId) ? state.lastFileGroupId : null)
+        ?? getFirstGroup(root)?.id
+      targetGroupId = anchor
+    }
+  }
   if (!targetGroupId) return noChange(state)
 
   // 不做 fileId 去重：AI tab 共享 AI_WINDOW_ID，去重会吞掉新窗口。

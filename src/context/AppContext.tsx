@@ -31,6 +31,7 @@ const initialLayout: LayoutState = {
   activeGroupId: null,
   activeTabId: null,
   lastAiTabId: null,
+  lastFileGroupId: null,
   openFiles: {},
 }
 
@@ -60,13 +61,16 @@ function applyLayoutResult(state: LayoutState, result: LayoutResult): LayoutStat
     }
   }
 
-  // 最近聚焦的 AI 窗口：任何操作把激活 tab 切到 AI 窗口时记录
+  // 最近聚焦的 AI 窗口 / 最后工作的文档组（与 lastAiTabId 对称维护）
   let lastAiTabId = state.lastAiTabId
+  let lastFileGroupId = state.lastFileGroupId
   if (result.layoutRoot && result.activeTabId) {
     const activeGroup = findGroupContainingTab(result.layoutRoot, result.activeTabId)
     const activeTab = activeGroup?.tabs.find((t) => t.id === result.activeTabId)
     if (activeTab?.fileId === AI_WINDOW_ID) {
       lastAiTabId = activeTab.id
+    } else if (result.activeGroupId) {
+      lastFileGroupId = result.activeGroupId
     }
   }
 
@@ -77,6 +81,7 @@ function applyLayoutResult(state: LayoutState, result: LayoutResult): LayoutStat
     activeGroupId: result.activeGroupId,
     activeTabId: result.activeTabId,
     lastAiTabId,
+    lastFileGroupId,
   }
 }
 
@@ -148,6 +153,7 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
         activeGroupId: groupId,
         activeTabId: tabId,
         lastAiTabId: activatedTab?.fileId === AI_WINDOW_ID ? tabId : state.lastAiTabId,
+        lastFileGroupId: activatedTab && activatedTab.fileId !== AI_WINDOW_ID ? groupId : state.lastFileGroupId,
       }
     }
     case 'SET_ACTIVE_GROUP': {
@@ -161,6 +167,7 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
         activeGroupId: group.id,
         activeTabId: activeTab?.id ?? null,
         lastAiTabId: activeTab?.fileId === AI_WINDOW_ID ? activeTab.id : state.lastAiTabId,
+        lastFileGroupId: activeTab && activeTab.fileId !== AI_WINDOW_ID ? group.id : state.lastFileGroupId,
       }
     }
     case 'TOGGLE_VIEW_MODE': {

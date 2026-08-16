@@ -87,6 +87,8 @@ export interface LayoutState {
   activeTabId: string | null
   // 最近聚焦过的 AI 窗口 tab —— 划选引用打开时优先聚焦它
   lastAiTabId: string | null
+  // 用户最后工作的非 AI 组 —— 💬 新建 AI 窗口时的锚点（防止堆叠在 AI 窗口下方）
+  lastFileGroupId: string | null
 
   // Open files (keyed by fileId)
   openFiles: Record<string, OpenFile>

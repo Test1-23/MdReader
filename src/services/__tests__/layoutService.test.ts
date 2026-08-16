@@ -18,7 +18,8 @@ function openFile(fileId: string): OpenFile {
 function emptyState(): LayoutState {
   return {
     fileTreeRoot: null, fileTree: null, sidebarLoading: false,
-    layoutRoot: null, activeGroupId: null, activeTabId: null, lastAiTabId: null, openFiles: {},
+    layoutRoot: null, activeGroupId: null, activeTabId: null,
+    lastAiTabId: null, lastFileGroupId: null, openFiles: {},
   }
 }
 
@@ -31,12 +32,14 @@ function toState(prev: LayoutState, result: LayoutResult): LayoutState {
       openFiles = rest as unknown as typeof openFiles
     }
   }
-  // mirror applyLayoutResult's lastAiTabId maintenance
+  // mirror applyLayoutResult's lastAiTabId / lastFileGroupId maintenance
   let lastAiTabId = prev.lastAiTabId
+  let lastFileGroupId = prev.lastFileGroupId
   if (result.layoutRoot && result.activeTabId) {
     const activeGroup = findGroupContainingTab(result.layoutRoot, result.activeTabId)
     const activeTab = activeGroup?.tabs.find((t) => t.id === result.activeTabId)
     if (activeTab?.fileId === AI_WINDOW_ID) lastAiTabId = activeTab.id
+    else if (result.activeGroupId) lastFileGroupId = result.activeGroupId
   }
   return {
     fileTreeRoot: prev.fileTreeRoot, fileTree: prev.fileTree, sidebarLoading: prev.sidebarLoading,
@@ -44,6 +47,7 @@ function toState(prev: LayoutState, result: LayoutResult): LayoutState {
     activeGroupId: result.activeGroupId,
     activeTabId: result.activeTabId,
     lastAiTabId,
+    lastFileGroupId,
     openFiles,
   }
 }
@@ -67,6 +71,16 @@ function setGroupActive(root: LayoutNode, groupId: string, index: number): Layou
     return root.id === groupId ? { ...root, activeTabIndex: index } : root
   }
   return { ...root, children: root.children.map((c) => setGroupActive(c, groupId, index)) }
+}
+
+function parentOf(root: LayoutNode, targetId: string): LayoutNode | null {
+  if (root.type === 'group') return null
+  for (const child of root.children) {
+    if (child.id === targetId) return root
+    const found = parentOf(child, targetId)
+    if (found) return found
+  }
+  return null
 }
 
 beforeEach(() => {
@@ -154,6 +168,71 @@ describe('OPEN_AI_WINDOW_BELOW_FOCUS', () => {
     state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }))
     const aiTabIdsAfter = collectAllTabs(state.layoutRoot!).filter((t) => t.fileId === AI_WINDOW_ID).map((t) => t.id)
     expect(aiTabIdsAfter).toHaveLength(2)
+  })
+
+  it('regression: after the quote flow stole focus to the AI window, 💬 anchors under the DOCUMENT group', () => {
+    // 复现根因：OPEN_AI_WINDOW（引用流）把 activeGroupId 抢到 AI 窗口
+    let state = openFileOp(emptyState(), 'a')
+    const docGroupId = state.activeGroupId!
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW' }))
+    // 此时活跃组是 AI 窗口（引用流语义正确），lastFileGroupId 记住文档组
+    expect(state.activeGroupId).not.toBe(docGroupId)
+    expect(state.lastFileGroupId).toBe(docGroupId)
+
+    // 点 💬：新窗必须分屏在文档组下方，而不是 AI 窗口下方
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }))
+    const newGroupId = findGroupContainingTab(state.layoutRoot!, state.activeTabId!)!.id
+    const docGroup = findGroup(state.layoutRoot!, docGroupId)!
+    const newGroup = findGroup(state.layoutRoot!, newGroupId)!
+    // 新窗组与文档组共享同一个父 split（即分屏在文档组下方）
+    const docParent = parentOf(state.layoutRoot!, docGroup.id)
+    const newParent = parentOf(state.layoutRoot!, newGroup.id)
+    expect(docParent).not.toBeNull()
+    expect(newParent?.id).toBe(docParent?.id)
+    // 父 split 是纵向（bottom），原组（文档组）在前
+    expect(docParent!.type).toBe('split')
+    if (docParent!.type === 'split') {
+      expect(docParent!.direction).toBe('vertical')
+      expect(docParent!.children[0].id).toBe(docGroup.id)
+      expect(docParent!.children[1].id).toBe(newGroup.id)
+    }
+  })
+
+  it('successive 💬 clicks keep anchoring the same document group (never stack under an AI window)', () => {
+    let state = openFileOp(emptyState(), 'a')
+    const docGroupId = state.activeGroupId!
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW' }))
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }))
+    const firstNewAiGroupId = findGroupContainingTab(state.layoutRoot!, state.activeTabId!)!.id
+    // 第一次 💬 后活跃组是新 AI 窗；再点 💬 仍应锚定文档组
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' }))
+    const secondNewAiGroupId = findGroupContainingTab(state.layoutRoot!, state.activeTabId!)!.id
+    expect(secondNewAiGroupId).not.toBe(firstNewAiGroupId)
+    // 第二个新窗与文档组共享父 split（仍分屏在文档组下方，而非第一个 AI 窗下）
+    const docGroup = findGroup(state.layoutRoot!, docGroupId)!
+    const secondNewGroup = findGroup(state.layoutRoot!, secondNewAiGroupId)!
+    const docParent = parentOf(state.layoutRoot!, docGroup.id)
+    const secondParent = parentOf(state.layoutRoot!, secondNewGroup.id)
+    expect(docParent).not.toBeNull()
+    expect(secondParent?.id).toBe(docParent?.id)
+  })
+
+  it('falls back to the first group when the active group is an AI window and lastFileGroupId is stale', () => {
+    let state = openFileOp(emptyState(), 'a')
+    const firstGroupId = state.activeGroupId!
+    state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW' }))
+    // 人为清空锚点并指向 AI 组
+    const stale = { ...state, lastFileGroupId: null }
+    const result = execute(stale, { type: 'OPEN_AI_WINDOW_BELOW_FOCUS' })
+    expect(result.layoutRoot).not.toBeNull()
+    expect(result.activeTabId).not.toBeNull()
+    // 新窗分屏在第一个组（文档组）下方
+    const firstGroup = findGroup(result.layoutRoot!, firstGroupId)!
+    const newGroup = findGroupContainingTab(result.layoutRoot!, result.activeTabId!)!
+    const firstParent = parentOf(result.layoutRoot!, firstGroup.id)
+    const newParent = parentOf(result.layoutRoot!, newGroup.id)
+    expect(firstParent).not.toBeNull()
+    expect(newParent?.id).toBe(firstParent?.id)
   })
 })
 
