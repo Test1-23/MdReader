@@ -115,6 +115,8 @@ export interface UIState {
   aiConversations: Record<string, Conversation> // 按 AI tabId 键控
   startupConversation: Conversation | null // 启动恢复，首窗原子领取
   conversationList: Array<{ id: string; title: string; updatedAt: number }>
+  // 内联输入框提交的草稿 —— 目标 AI 窗口的 ChatInput 消费后清空
+  pendingDraft: string | null
 }
 
 /** 待发送的引用内容（划选后点击 📎 引用累计） */
@@ -129,9 +131,10 @@ export interface AIChatState {
   aiConversations: Record<string, Conversation>
   startupConversation: Conversation | null
   conversationList: Array<{ id: string; title: string; updatedAt: number }>
+  pendingDraft: string | null
 }
 
-export type UIStateView = Omit<UIState, 'pendingQuotes' | 'aiConversations' | 'startupConversation' | 'conversationList'>
+export type UIStateView = Omit<UIState, 'pendingQuotes' | 'aiConversations' | 'startupConversation' | 'conversationList' | 'pendingDraft'>
 
 // ---- App Actions ----
 
@@ -175,6 +178,9 @@ export type UIAction =
   | { type: 'ADD_QUOTE'; payload: PendingQuote }
   | { type: 'REMOVE_QUOTE'; payload: { id: string } }
   | { type: 'CLEAR_QUOTES' }
+  // 内联输入框提交的草稿（目标 AI 窗口消费后清空）
+  | { type: 'SET_PENDING_DRAFT'; payload: { text: string } }
+  | { type: 'CLEAR_PENDING_DRAFT' }
 
   // AI conversations（按窗口 tabId 键控）
   // 函数式更新对不存在的 tabId 直接 no-op —— 防流式结束后复活已关闭窗口的对话

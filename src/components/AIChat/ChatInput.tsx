@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { PendingQuote } from '../../types'
+import { useUIDispatch } from '../../context/AppContext'
 
 interface ChatInputProps {
   pendingQuotes: PendingQuote[]
@@ -9,13 +10,17 @@ interface ChatInputProps {
   onSend: (message: string, thinking: boolean) => void
   streaming: boolean
   onStop: () => void
+  // 内联输入框提交的草稿 —— 仅活跃窗口消费
+  pendingDraft: string | null
+  isActiveWindow: boolean
 }
 
-export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onStop }: ChatInputProps) {
+export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onStop, pendingDraft, isActiveWindow }: ChatInputProps) {
   const [input, setInput] = useState('')
   const [deepThink, setDeepThink] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const didFocus = useRef(false)
+  const dispatch = useUIDispatch()
 
   // 仅在面板首次挂载时聚焦一次 —— 划选新文本不再抢占文档焦点
   useEffect(() => {
@@ -25,6 +30,16 @@ export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onS
     }
   }, [])
 
+  // 消费内联输入框的草稿：仅活跃 AI 窗口填写并聚焦（React 18 批处理保证
+  // 同一 commit 内看到 activeTabId 与 pendingDraft；StrictMode 下幂等）
+  useEffect(() => {
+    if (pendingDraft !== null && isActiveWindow) {
+      setInput(pendingDraft)
+      inputRef.current?.focus()
+      dispatch({ type: 'CLEAR_PENDING_DRAFT' })
+    }
+  }, [pendingDraft, isActiveWindow, dispatch])
+
   const handleSend = () => {
     const trimmed = input.trim()
     if (!trimmed || streaming) return
@@ -33,6 +48,8 @@ export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onS
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // IME 守卫：中文输入法组合确认的 Enter 不能触发发送
+    if (e.nativeEvent.isComposing) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
@@ -47,6 +64,7 @@ export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onS
           {pendingQuotes.map((quote) => (
             <span
               key={quote.id}
+              data-quote-chip
               className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-full text-[10px] text-blue-700 dark:text-blue-300 max-w-full"
               title={quote.text}
             >
@@ -84,6 +102,7 @@ export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onS
       <div className="relative">
         <textarea
           ref={inputRef}
+          data-chat-input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}

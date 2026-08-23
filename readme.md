@@ -26,10 +26,11 @@
 - Paste markdown content directly (`Ctrl+V`)
 
 ### AI Chat
-- Select text in a document → a 📎 quote bubble appears at the end of the selection; click it to quote and open/focus the AI window on the right
-- Multiple quotes accumulate as removable chips above the input and are all attached to your next message
+- Select text in a document → an inline question box appears at the end of the selection; type your question right there
+- Keep selecting more text while the box is open to accumulate multiple quotes (shown as removable chips)
+- **Ctrl+Enter** (or ↑) fills your question into the AI window's input — nothing is sent until you confirm there
+- The full document is included as context; all quotes attach to your next message
 - 💬 button in the Activity Bar opens a NEW independent AI window split below the focused pane — each window has its own conversation and history
-- The full document is included as context
 - Streaming AI replies (SSE via Electron IPC)
 - Conversation tree with branching — backtrack to any point and create new branches
 - Git-style tree diagram visualization
@@ -99,14 +100,15 @@ npm run build
 
 ### AI Chat
 1. Click **⚙️ Settings** in the Activity Bar → configure your API endpoint, key, and model
-2. Select text in any open markdown document → click the **📎 引用** bubble at the end of the selection — the AI window opens (or focuses) at the far right and the quote appears as a chip
-3. Select and quote more text to accumulate multiple chips; click **×** on a chip to remove it
-4. Click **💬** in the Activity Bar to open an additional independent AI window below the focused pane
-5. Type your question and press **Enter** or click **↑ Send** — all pending quotes are attached to the message
-6. The AI receives the full document as context plus your quotes
-7. Use **🧠 Deep Think** to enable reasoning mode (DeepSeek R1)
-8. Click **🗂 Conversations** to manage saved conversations
-9. Use **🌳 Tree View** to navigate conversation branches
+2. Select text in any open markdown document → an **inline question box** appears at the end of the selection; select more text while it's open to accumulate quotes (chips shown in the box, removable with ×)
+3. Type your question (**Enter** adds a new line) and press **Ctrl+Enter** or click **↑** — the AI window opens (or focuses) at the far right with your question filled in and the quotes as chips
+4. Review and press **Enter** or **↑ Send** in the AI window — all quotes are attached to the message
+5. **Esc** / click elsewhere / scroll dismisses the inline box and discards its text and quotes
+6. Click **💬** in the Activity Bar to open an additional independent AI window below the focused pane
+7. The AI receives the full document as context plus your quotes
+8. Use **🧠 Deep Think** to enable reasoning mode (DeepSeek R1)
+9. Click **🗂 Conversations** to manage saved conversations
+10. Use **🌳 Tree View** to navigate conversation branches
 
 ### Keyboard Shortcuts
 

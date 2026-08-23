@@ -5,7 +5,7 @@ import {
   replaceNodeContent, replaceAssistantReply,
 } from '../../utils/conversationTree'
 import type { Conversation } from '../../utils/conversationTree'
-import { findGroupContainingTab } from '../../utils/layout'
+import { findGroup, findGroupContainingTab, getActiveTab } from '../../utils/layout'
 import { useAiStream } from '../../hooks/useAiStream'
 import type { ConvUpdater } from '../../hooks/useAiStream'
 import { useDebouncedPersist } from '../../hooks/useDebouncedPersist'
@@ -48,17 +48,24 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   }, [tabId, aiDispatch])
 
   // ---- 当前文档全文（喂给 AI 的上下文）----
+  // 修复既有 bug：OPEN_AI_WINDOW 后 activeTabId 是 AI tab，openFiles 中无此项，
+  // 全文上下文永远是 undefined。改为优先从 lastFileGroupId（用户最后工作的文档组）派生。
   const docContentRef = useRef<string | undefined>(undefined)
   useEffect(() => {
-    if (!layoutState.layoutRoot || !layoutState.activeTabId) {
+    if (!layoutState.layoutRoot) {
       docContentRef.current = undefined
       return
     }
-    const group = findGroupContainingTab(layoutState.layoutRoot, layoutState.activeTabId)
-    const tab = group?.tabs.find((t) => t.id === layoutState.activeTabId)
+    const root = layoutState.layoutRoot
+    const group =
+      (layoutState.lastFileGroupId && findGroup(root, layoutState.lastFileGroupId))
+      || (layoutState.activeTabId && findGroupContainingTab(root, layoutState.activeTabId))
+      || null
+    const tab = group ? getActiveTab(group) : null
+    // AI tab 在 openFiles 中天然无值，无需显式 AI_WINDOW_ID 守卫
     const file = tab ? layoutState.openFiles[tab.fileId] : undefined
     docContentRef.current = file?.content
-  }, [layoutState.layoutRoot, layoutState.activeTabId, layoutState.openFiles])
+  }, [layoutState.layoutRoot, layoutState.activeTabId, layoutState.lastFileGroupId, layoutState.openFiles])
 
   // ---- 流式状态机（R1）：生命周期、竞态防护、chunk 批处理全部收敛于此 ----
   const stream = useAiStream({
@@ -354,6 +361,8 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
         onSend={handleSend}
         streaming={stream.streaming}
         onStop={handleStop}
+        pendingDraft={aiState.pendingDraft}
+        isActiveWindow={layoutState.activeTabId === tabId}
       />
     </div>
   )

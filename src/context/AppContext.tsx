@@ -209,6 +209,7 @@ const initialUI: UIState = {
   aiConversations: {},
   startupConversation: null,
   conversationList: [],
+  pendingDraft: null,
 }
 
 function uiReducer(state: UIState, action: UIAction): UIState {
@@ -238,6 +239,10 @@ function uiReducer(state: UIState, action: UIAction): UIState {
       return { ...state, pendingQuotes: state.pendingQuotes.filter((q) => q.id !== action.payload.id) }
     case 'CLEAR_QUOTES':
       return { ...state, pendingQuotes: [] }
+    case 'SET_PENDING_DRAFT':
+      return { ...state, pendingDraft: action.payload.text }
+    case 'CLEAR_PENDING_DRAFT':
+      return { ...state, pendingDraft: null }
 
     // ---- AI conversations（按窗口 tabId 键控）----
     case 'SET_AI_CONVERSATION': {
@@ -381,7 +386,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     aiConversations: uiState.aiConversations,
     startupConversation: uiState.startupConversation,
     conversationList: uiState.conversationList,
-  }), [uiState.pendingQuotes, uiState.aiConversations, uiState.startupConversation, uiState.conversationList])
+    pendingDraft: uiState.pendingDraft,
+  }), [uiState.pendingQuotes, uiState.aiConversations, uiState.startupConversation, uiState.conversationList, uiState.pendingDraft])
 
   return (
     <LayoutStateContext.Provider value={layoutState}>

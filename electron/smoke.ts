@@ -52,7 +52,8 @@ const watchDog = setTimeout(() => {
 }, 90_000)
 
 // ---- local SSE provider stand-in ----
-function startSseServer(): Promise<{ port: number; close: () => void }> {
+function startSseServer(): Promise<{ port: number; close: () => void; getLastBody: () => unknown | null }> {
+  let lastBody: unknown | null = null
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
     if (!pathname.endsWith('/chat/completions')) {
@@ -60,6 +61,12 @@ function startSseServer(): Promise<{ port: number; close: () => void }> {
       res.end()
       return
     }
+    // capture the request body so tests can assert what the app sent
+    const chunks: Buffer[] = []
+    req.on('data', (c: Buffer) => chunks.push(c))
+    req.on('end', () => {
+      try { lastBody = JSON.parse(Buffer.concat(chunks).toString('utf-8')) } catch { lastBody = null }
+    })
     const route = pathname.split('/')[1] ?? 'ok'
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -86,9 +93,8 @@ function startSseServer(): Promise<{ port: number; close: () => void }> {
       res.end()
     } else if (route === 'slow') {
       delta('first')
-      req.on('close', () => {
-        try { res.end() } catch { /* already closed */ }
-      })
+      // 悬挂不结束：只有客户端 cancel 才能终止连接。若在 close 后 res.end()，
+      // 主进程可能在 abort 到达前读到"流正常结束"→ 报截断而非取消（测试竞态）。
     } else {
       res.end()
     }
@@ -96,7 +102,7 @@ function startSseServer(): Promise<{ port: number; close: () => void }> {
   return new Promise((resolvePromise) => {
     server.listen(0, '127.0.0.1', () => {
       const port = (server.address() as { port: number }).port
-      resolvePromise({ port, close: () => server.close() })
+      resolvePromise({ port, close: () => server.close(), getLastBody: () => lastBody })
     })
   })
 }
@@ -338,57 +344,96 @@ async function main(): Promise<void> {
     const bold = await run<boolean>(`document.querySelector('.markdown-body strong')?.textContent === 'bold'`)
     check('GFM bold rendered', bold === true)
 
-    // ---- new interaction: selection shows a quote bubble, does NOT auto-open AI ----
-    const selectionDone = await run<boolean>(`
-      (() => {
-        const para = document.querySelector('.markdown-body p')
-        if (!para) return false
-        const range = document.createRange()
-        range.selectNodeContents(para)
-        const sel = window.getSelection()
-        sel.removeAllRanges()
-        sel.addRange(range)
-        para.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
-        return true
-      })()`)
+    // ---- new interaction: selection shows an inline input box, does NOT auto-open AI ----
+    // (selectNode runs in the RENDERER — kept as a string so the main process
+    // tsconfig needs no DOM lib)
+    const selectNode = `(selector) => {
+      const node = document.querySelector(selector)
+      if (!node) return false
+      const range = document.createRange()
+      range.selectNodeContents(node)
+      const sel = window.getSelection()
+      sel.removeAllRanges()
+      sel.addRange(range)
+      node.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+      return true
+    }`
+    const selectionDone = await run<boolean>(`(${selectNode})('.markdown-body p')`)
     check('selection dispatched', selectionDone === true)
 
-    await waitFor('quote bubble appears at selection end', async () =>
-      run<boolean>(`document.querySelector('[data-quote-bubble]') !== null`))
+    await waitFor('inline quote box appears at selection end', async () =>
+      run<boolean>(`document.querySelector('[data-inline-quote-box]') !== null`))
     const aiTabCountAfterSelect = await run<number>(`document.querySelectorAll('[title="ai://chat"]').length`)
     check('mouseup no longer auto-opens the AI window', aiTabCountAfterSelect === 0, aiTabCountAfterSelect)
+    const focusOnInline = await run<boolean>(
+      `document.activeElement === document.querySelector('[data-inline-quote-input]')`)
+    check('inline textarea auto-focused', focusOnInline === true)
+    const inlineChipCount = await run<number>(`document.querySelectorAll('[data-inline-quote-chip]').length`)
+    check('first quote captured as inline chip', inlineChipCount === 1, inlineChipCount)
 
-    // ---- click the bubble → AI window opens (right) + chip appears ----
-    await run(`document.querySelector('[data-quote-bubble]').click()`)
-    await waitFor('AI window opens after quote click', async () =>
+    // ---- second selection while the box is open → quote APPENDS, box survives ----
+    const secondSelection = await run<boolean>(`(${selectNode})('.markdown-body strong')`)
+    check('second selection dispatched', secondSelection === true)
+    await waitFor('second quote appended while box stays open', async () =>
+      run<boolean>(`document.querySelectorAll('[data-inline-quote-chip]').length === 2`))
+    const boxStillOpen = await run<boolean>(`document.querySelector('[data-inline-quote-box]') !== null`)
+    check('inline box stays open during accumulation', boxStillOpen === true)
+
+    // ---- type a multi-line question, Ctrl+Enter → fills ChatInput, does NOT auto-send ----
+    await run(`
+      (() => {
+        const ta = document.querySelector('[data-inline-quote-input]')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+        setter.call(ta, 'hello smoke\\nsecond line')
+        ta.dispatchEvent(new Event('input', { bubbles: true }))
+        return true
+      })()`)
+    await run(`
+      document.querySelector('[data-inline-quote-input]').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }))`)
+    await waitFor('AI window opens after Ctrl+Enter', async () =>
       run<boolean>(`document.querySelectorAll('[title="ai://chat"]').length === 1`))
-    await waitFor('quote chip appears above the input', async () =>
-      run<boolean>(`document.body.textContent.includes('📎')`))
-    check('quote chip visible in ChatInput', true)
+    const chatValue = await run<string>(`document.querySelector('[data-chat-input]')?.value ?? ''`)
+    check('question filled into ChatInput with newline (not auto-sent)',
+      chatValue.includes('hello smoke') && chatValue.includes('\n'), JSON.stringify(chatValue))
+    const globalChipCount = await run<number>(`document.querySelectorAll('[data-quote-chip]').length`)
+    check('both quotes became global chips', globalChipCount === 2, globalChipCount)
+    check('not auto-sent before user confirms',
+      await run<boolean>(`!document.body.textContent.includes('Hello from smoke server')`))
+
+    // ---- user presses send in the AI window: quotes attach, chips clear, stream renders ----
+    await run(`document.querySelector('[title="发送"]').click()`)
+    await waitFor('streamed reply rendered', async () =>
+      run<boolean>(`document.body.textContent.includes('Hello from smoke server')`))
+    check('send streams a reply end-to-end', true)
+    await waitFor('quote chips cleared after send', async () =>
+      run<boolean>(`document.querySelectorAll('[data-quote-chip]').length === 0`))
+    check('pending quotes cleared after send', true)
+
+    // ---- full-document context fix (Step 2): system message carries <document> ----
+    const lastBody = sse.getLastBody() as { messages?: Array<{ role: string; content: string }> } | null
+    const systemMsg = lastBody?.messages?.find((m) => m.role === 'system')?.content ?? ''
+    check('full-document context sent to the API',
+      systemMsg.includes('<document>') && systemMsg.includes('# Smoke Heading'), systemMsg.slice(0, 200))
+
+    // ---- dismiss path leaks nothing: reopen box → Escape → no global chips, empty ChatInput ----
+    await run<boolean>(`(${selectNode})('.markdown-body p')`)
+    await waitFor('inline box reopens', async () =>
+      run<boolean>(`document.querySelector('[data-inline-quote-box]') !== null`))
+    await run(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+    await waitFor('inline box dismissed by Escape', async () =>
+      run<boolean>(`document.querySelector('[data-inline-quote-box]') === null`))
+    const leakedChips = await run<number>(`document.querySelectorAll('[data-quote-chip]').length`)
+    check('dismiss leaks no global chips', leakedChips === 0, leakedChips)
+    const chatInputEmpty = await run<boolean>(`(document.querySelector('[data-chat-input]')?.value ?? '') === ''`)
+    check('ChatInput stays empty after dismiss', chatInputEmpty === true)
 
     // ---- ActivityBar 💬 → a SECOND independent AI window under the focused pane ----
     await run(`document.querySelector('[title="New AI Chat"]').click()`)
     await waitFor('second AI window opens', async () =>
       run<boolean>(`document.querySelectorAll('[title="ai://chat"]').length === 2`))
     check('two independent AI windows coexist', true)
-
-    // ---- send from the focused window: quote attaches, chips clear, stream renders ----
-    await run(`
-      (() => {
-        const ta = document.querySelector('textarea')
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
-        setter.call(ta, 'hello smoke')
-        ta.dispatchEvent(new Event('input', { bubbles: true }))
-        return true
-      })()`)
-    await run(`document.querySelector('[title="发送"]').click()`)
-    await waitFor('streamed reply rendered', async () =>
-      run<boolean>(`document.body.textContent.includes('Hello from smoke server')`))
-    check('send streams a reply end-to-end', true)
-    await waitFor('quote chips cleared after send', async () =>
-      run<boolean>(`!document.body.textContent.includes('📎')`))
-    check('pending quotes cleared after send', true)
-    await waitFor('second window still shows its own empty conversation', async () =>
+    await waitFor('second window shows its own empty conversation', async () =>
       run<boolean>(`document.body.textContent.includes('No messages yet')`))
     check('windows keep independent conversations', true)
 

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -6,6 +6,9 @@ import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/pris
 import { useUIContext, useLayoutDispatch, useUIDispatch } from '../../context/AppContext'
 import { headingToId } from '../../utils/markdown'
 import { createId } from '../../utils/fileReader'
+import type { PendingQuote } from '../../types'
+import { appendQuote, clampInlinePosition, shouldSubmit } from './inlineQuote'
+import { InlineQuoteBox } from './InlineQuoteBox'
 
 interface MarkdownViewerProps {
   content: string
@@ -135,10 +138,10 @@ const COMPONENTS = {
   blockquote: BlockquoteRenderer,
 }
 
-interface QuoteBubble {
+interface InlineQuoteState {
   x: number
   y: number
-  text: string
+  quotes: PendingQuote[]
 }
 
 // memo: content-identical renders skip the full ReactMarkdown parse + Prism
@@ -147,56 +150,96 @@ interface QuoteBubble {
 export const MarkdownViewer = memo(function MarkdownViewer({ content }: MarkdownViewerProps) {
   const layoutDispatch = useLayoutDispatch()
   const uiDispatch = useUIDispatch()
-  const [bubble, setBubble] = useState<QuoteBubble | null>(null)
+  const [inline, setInline] = useState<InlineQuoteState | null>(null)
+  const downInsideRef = useRef(false)
 
-  // 划选 → 选区末尾浮出「📎 引用」气泡（不再自动打开 AI 窗口）
+  // 划选 → 选区末尾浮出内联提问输入框（不再自动打开 AI 窗口）；
+  // 输入框打开期间继续划选 → 追加引用（保持在原位置，清选区并重聚焦输入框）
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest?.('[data-quote-bubble]')) return
+    const target = e.target as HTMLElement
+    // 内联框内部操作（选择 textarea 文本 / 点 chip）不触发追加或关闭
+    if (target.closest?.('[data-inline-quote-box]')) return
+    // 框内拖选在框外释放：不追加、不关闭
+    if (inline && downInsideRef.current) return
     const sel = window.getSelection()
     const text = sel?.toString()?.trim()
     if (text && sel && sel.rangeCount > 0) {
       const rect = sel.getRangeAt(0).getBoundingClientRect()
-      // 零面积选区（单纯点击）不显示气泡
+      // 零面积选区（单纯点击）不开框
       if (rect.width > 0 || rect.height > 0) {
-        setBubble({
-          x: Math.min(rect.right + 6, window.innerWidth - 96),
-          y: Math.min(rect.bottom + 6, window.innerHeight - 44),
-          text,
-        })
+        if (inline) {
+          setInline((prev) =>
+            prev ? { ...prev, quotes: appendQuote(prev.quotes, { id: createId('quote'), text }) } : prev)
+          sel.removeAllRanges()
+          requestAnimationFrame(() => {
+            document.querySelector<HTMLTextAreaElement>('[data-inline-quote-input]')?.focus()
+          })
+        } else {
+          const { x, y } = clampInlinePosition(rect, window.innerWidth, window.innerHeight)
+          setInline({ x, y, quotes: [{ id: createId('quote'), text }] })
+          sel.removeAllRanges()
+        }
         return
       }
     }
-    setBubble(null)
-  }, [])
+    setInline(null)
+  }, [inline])
 
-  // 气泡消失：点击他处 / 滚动（预览在内部 overflow 容器滚动不冒泡，需 capture）/ Esc
+  // 手势感知消失状态机（打开期间）：
+  // - mousedown 只记录是否落在框内，不消失（否则第二次划选无法追加）
+  // - mouseup（capture）才判定：框外 + 无实际选区 → 消失
+  // - 滚动（capture，预览在内部 overflow 容器滚动不冒泡）/ Esc → 消失
   useEffect(() => {
-    if (!bubble) return
-    const dismiss = (e: Event) => {
-      if ((e.target as HTMLElement).closest?.('[data-quote-bubble]')) return
-      setBubble(null)
+    if (!inline) return
+    const onMouseDown = (e: Event) => {
+      downInsideRef.current = !!(e.target as HTMLElement).closest?.('[data-inline-quote-box]')
+    }
+    const onMouseUp = (e: Event) => {
+      const target = e.target as HTMLElement
+      if (downInsideRef.current || target.closest?.('[data-inline-quote-box]')) return
+      // 有实际选区（正在做新划选）→ 不消失，交给 handleMouseUp 追加
+      const sel = window.getSelection()
+      const text = sel?.toString()?.trim()
+      if (text && sel && sel.rangeCount > 0) {
+        const rect = sel.getRangeAt(0).getBoundingClientRect()
+        if (rect.width > 0 || rect.height > 0) return
+      }
+      setInline(null)
+    }
+    const onScroll = (e: Event) => {
+      if ((e.target as HTMLElement).closest?.('[data-inline-quote-box]')) return
+      setInline(null)
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setBubble(null)
+      if (e.key === 'Escape') setInline(null)
     }
-    document.addEventListener('mousedown', dismiss, true)
-    document.addEventListener('scroll', dismiss, true)
+    document.addEventListener('mousedown', onMouseDown, true)
+    document.addEventListener('mouseup', onMouseUp, true)
+    document.addEventListener('scroll', onScroll, true)
     document.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('mousedown', dismiss, true)
-      document.removeEventListener('scroll', dismiss, true)
+      document.removeEventListener('mousedown', onMouseDown, true)
+      document.removeEventListener('mouseup', onMouseUp, true)
+      document.removeEventListener('scroll', onScroll, true)
       document.removeEventListener('keydown', onKey)
     }
-  }, [bubble])
+  }, [inline])
 
-  const handleQuoteClick = useCallback(() => {
-    if (!bubble) return
-    uiDispatch({ type: 'ADD_QUOTE', payload: { id: createId('quote'), text: bubble.text } })
+  // 提交：引用进全局 chip + 问题填入 AI 窗口 ChatInput（不自动发送）+ 打开/聚焦 AI 窗
+  // 引用仅在提交时进全局 —— 消失路径零泄漏
+  const handleInlineSubmit = useCallback((text: string) => {
+    if (!inline) return
+    const trimmed = text.trim()
+    if (!shouldSubmit(trimmed, inline.quotes.length)) return
+    for (const quote of inline.quotes) {
+      uiDispatch({ type: 'ADD_QUOTE', payload: quote })
+    }
+    uiDispatch({ type: 'SET_PENDING_DRAFT', payload: { text: trimmed } })
     // 复用统一窗口逻辑：聚焦最近 AI 窗口，否则最右侧分屏
     layoutDispatch({ type: 'OPEN_AI_WINDOW' })
     window.getSelection()?.removeAllRanges()
-    setBubble(null)
-  }, [bubble, uiDispatch, layoutDispatch])
+    setInline(null)
+  }, [inline, uiDispatch, layoutDispatch])
 
   return (
     <div
@@ -210,18 +253,16 @@ export const MarkdownViewer = memo(function MarkdownViewer({ content }: Markdown
         {content}
       </ReactMarkdown>
 
-      {/* 选区末尾浮动引用气泡 */}
-      {bubble && (
-        <button
-          data-quote-bubble
-          style={{ position: 'fixed', left: bubble.x, top: bubble.y, zIndex: 50 }}
-          onMouseDown={(e) => e.preventDefault() /* 保住选区直到点击 */}
-          onClick={handleQuoteClick}
-          className="px-2.5 py-1 flex items-center gap-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg text-xs transition-colors"
-          title="引用选中内容并打开 AI"
-        >
-          📎 引用
-        </button>
+      {/* 选区末尾内联提问输入框 */}
+      {inline && (
+        <InlineQuoteBox
+          x={inline.x}
+          y={inline.y}
+          quotes={inline.quotes}
+          onRemoveQuote={(id) =>
+            setInline((prev) => prev ? { ...prev, quotes: prev.quotes.filter((q) => q.id !== id) } : prev)}
+          onSubmit={handleInlineSubmit}
+        />
       )}
     </div>
   )
