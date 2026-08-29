@@ -1,8 +1,25 @@
 import { useState, useCallback, useRef, memo } from 'react'
 import { useLayoutContext, useUIDispatch } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
-import { openFileByPath, generateTabId } from '../../utils/fileReader'
+import { openFileByPath, generateTabId, readDroppedMarkdownFiles } from '../../utils/fileReader'
+import { saveSnippetAsMarkdown } from '../../utils/importText'
+import { getFileName } from '../../utils/markdown'
 import type { FileTreeNode, FileDirEntry } from '../../types'
+import { ImportDialog } from './ImportDialog'
+import type { ImportSeed } from './ImportDialog'
+
+// 目录条目 → 树节点（面板内三处使用，抽为单一实现）
+function entriesToNodes(entries: FileDirEntry[]): FileTreeNode[] {
+  return entries.map((entry: FileDirEntry) => ({
+    name: entry.name,
+    path: entry.path,
+    isDirectory: entry.isDirectory,
+    isFile: entry.isFile,
+    extension: entry.extension,
+    children: undefined,
+    loaded: false,
+  }))
+}
 
 interface TreeNodeProps {
   node: FileTreeNode
@@ -85,13 +102,18 @@ const expandedChildren = new Set<string>()
 export function FileTreePanel() {
   const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
   const uiDispatch = useUIDispatch()
-  const { openFolderDialog, openFileDialog, readDir, readFile } = useElectronAPI()
+  const { openFolderDialog, openFileDialog, readDir, readFile, writeFile, saveFileDialog, isElectron } = useElectronAPI()
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
   const expandedRef = useRef(expandedDirs)
   expandedRef.current = expandedDirs
   // keep the module-scope set in sync for the memoized nodes
   expandedChildren.clear()
   for (const p of expandedDirs) expandedChildren.add(p)
+
+  // ---- 文本片段导入状态 ----
+  const [showImport, setShowImport] = useState(false)
+  const [importSeed, setImportSeed] = useState<ImportSeed | null>(null)
+  const [importBusy, setImportBusy] = useState(false)
 
   const handleOpenFolder = useCallback(async () => {
     try {
@@ -101,15 +123,7 @@ export function FileTreePanel() {
       layoutDispatch({ type: 'SET_SIDEBAR_LOADING', payload: true })
 
       const entries = await readDir(folderPath)
-      const nodes: FileTreeNode[] = entries.map((entry: FileDirEntry) => ({
-        name: entry.name,
-        path: entry.path,
-        isDirectory: entry.isDirectory,
-        isFile: entry.isFile,
-        extension: entry.extension,
-        children: undefined,
-        loaded: false,
-      }))
+      const nodes = entriesToNodes(entries)
 
       layoutDispatch({
         type: 'SET_FILE_TREE_ROOT',
@@ -143,15 +157,7 @@ export function FileTreePanel() {
       layoutDispatch({ type: 'SET_SIDEBAR_LOADING', payload: true })
       try {
         const entries = await readDir(node.path)
-        const children: FileTreeNode[] = entries.map((entry: FileDirEntry) => ({
-          name: entry.name,
-          path: entry.path,
-          isDirectory: entry.isDirectory,
-          isFile: entry.isFile,
-          extension: entry.extension,
-          children: undefined,
-          loaded: false,
-        }))
+        const children = entriesToNodes(entries)
         layoutDispatch({ type: 'SET_CHILDREN', payload: { parentPath: node.path, children } })
       } catch {
         layoutDispatch({ type: 'SET_SIDEBAR_LOADING', payload: false })
@@ -180,8 +186,79 @@ export function FileTreePanel() {
     }
   }, [openFileDialog, handleOpenFile, uiDispatch])
 
+  // ---- 文本片段导入 ----
+
+  // 「选择文件」→ 读入内容填充导入对话框（源名用于建议文件名）
+  const handlePickFile = useCallback(async () => {
+    try {
+      const filePath = await openFileDialog()
+      if (!filePath) return
+      const result = await readFile(filePath)
+      setImportSeed({ text: result.content, sourceName: getFileName(filePath) })
+    } catch {
+      uiDispatch({ type: 'SET_ERROR', payload: 'Failed to open file.' })
+    }
+  }, [openFileDialog, readFile, uiDispatch])
+
+  // 拖拽 .txt/.md 到面板 → 内容填充导入对话框
+  const handlePanelDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation() // 防全局 drop 处理器重复打开 tab
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return
+    const opened = await readDroppedMarkdownFiles(Array.from(e.dataTransfer.files), readFile, isElectron)
+    if (opened.length === 0) {
+      uiDispatch({ type: 'SET_ERROR', payload: 'No markdown file found in the dropped items.' })
+      return
+    }
+    setImportSeed({
+      text: opened.map((o) => o.content).join('\n\n'),
+      sourceName: opened[0].fileName,
+    })
+    setShowImport(true)
+  }, [readFile, isElectron, uiDispatch])
+
+  // 转换为 .md：整理 → 落盘（已开文件夹直存 / 否则保存对话框）→ 打开 + 树刷新
+  const handleImportConfirm = useCallback(async (text: string) => {
+    if (importBusy) return
+    setImportBusy(true)
+    try {
+      const res = await saveSnippetAsMarkdown(text, importSeed?.sourceName ?? null, {
+        getFileTreeRoot: () => layoutState.fileTreeRoot,
+        writeFile,
+        saveDialog: saveFileDialog,
+        openFileByPath: (p) => openFileByPath(p, readFile),
+      })
+      if (!res) return // 取消或空文本 → 无副作用，对话框保持打开
+      layoutDispatch({ type: 'OPEN_FILE', payload: { ...res.openFile, tabId: generateTabId() } })
+      // 存入已开文件夹根目录时刷新树（展开状态重置，与 handleOpenFolder 一致）
+      if (layoutState.fileTreeRoot && res.savedDir === layoutState.fileTreeRoot) {
+        const entries = await readDir(layoutState.fileTreeRoot)
+        layoutDispatch({
+          type: 'SET_FILE_TREE_ROOT',
+          payload: { root: layoutState.fileTreeRoot, nodes: entriesToNodes(entries) },
+        })
+        setExpandedDirs(new Set())
+      }
+      setShowImport(false)
+      setImportSeed(null)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      uiDispatch({ type: 'SET_ERROR', payload: `导入失败：${msg}` })
+    } finally {
+      setImportBusy(false)
+    }
+  }, [importBusy, importSeed, layoutState.fileTreeRoot, writeFile, saveFileDialog, readFile, readDir, layoutDispatch, uiDispatch])
+
   return (
-    <div className="flex flex-col h-full">
+    <div
+      className="flex flex-col h-full"
+      data-import-drop-zone
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+      onDrop={handlePanelDrop}
+    >
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-2 py-2 border-b border-gray-300 dark:border-gray-700">
         <button
@@ -197,6 +274,13 @@ export function FileTreePanel() {
           title="Open File"
         >
           📄
+        </button>
+        <button
+          onClick={() => setShowImport(true)}
+          className="px-3 py-1.5 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors"
+          title="导入"
+        >
+          📥
         </button>
       </div>
 
@@ -236,6 +320,17 @@ export function FileTreePanel() {
         <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500 border-t border-sidebar-border truncate">
           {layoutState.fileTreeRoot}
         </div>
+      )}
+
+      {/* 文本片段导入对话框 */}
+      {showImport && (
+        <ImportDialog
+          seed={importSeed}
+          busy={importBusy}
+          onClose={() => setShowImport(false)}
+          onConfirm={handleImportConfirm}
+          onPickFile={handlePickFile}
+        />
       )}
     </div>
   )

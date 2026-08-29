@@ -184,6 +184,51 @@ async function main(): Promise<void> {
     check('21MB file rejected with clear error', tooBig.includes('File too large'), tooBig)
   }
 
+  // ══════════════ Phase 1b: file:write API ══════════════
+  console.log('\nPhase 1b — file:write')
+  {
+    // round-trip
+    const written = await run<{ filePath: string }>(`
+      window.electronAPI.writeFile({ filePath: ${JSON.stringify(resolve(workDir, 'imported.md'))}, content: '# T\\n', overwrite: false })`)
+    check('write returns the effective path', written.filePath === resolve(workDir, 'imported.md'), written.filePath)
+    const roundTrip = await run<string>(`window.electronAPI.readFile(${JSON.stringify(resolve(workDir, 'imported.md'))}).then(r => r.content)`)
+    check('written content round-trips exactly', roundTrip === '# T\n', JSON.stringify(roundTrip))
+
+    // .md extension enforcement
+    const noExt = await run<{ filePath: string }>(`
+      window.electronAPI.writeFile({ filePath: ${JSON.stringify(resolve(workDir, 'noext'))}, content: 'x', overwrite: false })`)
+    check('.md extension appended when missing', noExt.filePath === resolve(workDir, 'noext.md'), noExt.filePath)
+
+    // auto-uniquify
+    const unique1 = await run<{ filePath: string }>(`
+      window.electronAPI.writeFile({ filePath: ${JSON.stringify(resolve(workDir, 'imported.md'))}, content: 'second', overwrite: false })`)
+    check('existing name uniquified to name(1).md', unique1.filePath === resolve(workDir, 'imported(1).md'), unique1.filePath)
+    const unique2 = await run<{ filePath: string }>(`
+      window.electronAPI.writeFile({ filePath: ${JSON.stringify(resolve(workDir, 'imported.md'))}, content: 'third', overwrite: false })`)
+    check('uniquify increments to name(2).md', unique2.filePath === resolve(workDir, 'imported(2).md'), unique2.filePath)
+
+    // overwrite: true replaces in place
+    const overwritten = await run<{ filePath: string }>(`
+      window.electronAPI.writeFile({ filePath: ${JSON.stringify(resolve(workDir, 'imported(1).md'))}, content: 'replaced', overwrite: true })`)
+    check('overwrite keeps the same path', overwritten.filePath === resolve(workDir, 'imported(1).md'), overwritten.filePath)
+    const replacedContent = await run<string>(`window.electronAPI.readFile(${JSON.stringify(resolve(workDir, 'imported(1).md'))}).then(r => r.content)`)
+    check('overwrite replaced the content', replacedContent === 'replaced', replacedContent)
+
+    // un-authorized dir rejected
+    const otherDir = await mkdtemp(resolve(tmpdir(), 'mdreader-smoke-unauth-'))
+    const unauthorizedWrite = await run<string>(`
+      window.electronAPI.writeFile({ filePath: ${JSON.stringify(resolve(otherDir, 'x.md'))}, content: 'x', overwrite: false }).then(
+        () => 'resolved', (err) => String(err && err.message ? err.message : err))`)
+    check('write to un-authorized path rejected', unauthorizedWrite.includes('not authorized'), unauthorizedWrite)
+    await rm(otherDir, { recursive: true, force: true })
+
+    // non-absolute path rejected
+    const relativeWrite = await run<string>(`
+      window.electronAPI.writeFile({ filePath: 'relative/x.md', content: 'x', overwrite: false }).then(
+        () => 'resolved', (err) => String(err && err.message ? err.message : err))`)
+    check('non-absolute path rejected', relativeWrite.includes('Invalid target path'), relativeWrite)
+  }
+
   // ══════════════ Phase 2: settings — key isolation / merge / clear ══════════════
   console.log('\nPhase 2 — settings & key isolation')
   {
@@ -451,6 +496,59 @@ async function main(): Promise<void> {
     if (consoleWarnings.length > 0) {
       console.log(`  (info) ${consoleWarnings.length} console warnings (not failures)`)
     }
+  }
+
+  // ══════════════ Phase 6: import dialog UI ══════════════
+  console.log('\nPhase 6 — import dialog UI')
+  {
+    // Phase 5 结束时切换到了 Settings 面板 —— 先切回 Explorer（FileTreePanel 重新挂载）
+    await run(`document.querySelector('[title="Explorer"]').click()`)
+    await waitFor('FileTreePanel remounts', async () =>
+      run<boolean>(`document.querySelector('[title="导入"]') !== null`))
+
+    // 点「导入」按钮 → 对话框出现
+    await run(`document.querySelector('[title="导入"]').click()`)
+    await waitFor('import dialog opens', async () =>
+      run<boolean>(`document.querySelector('[data-import-dialog]') !== null`))
+
+    // 初始确认钮 disabled
+    const initiallyDisabled = await run<boolean>(
+      `document.querySelector('[data-import-confirm]').disabled`)
+    check('confirm disabled on empty text', initiallyDisabled === true)
+
+    // 输入文本 → enabled
+    await run(`
+      (() => {
+        const ta = document.querySelector('[data-import-textarea]')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+        setter.call(ta, 'snippet text')
+        ta.dispatchEvent(new Event('input', { bubbles: true }))
+        return true
+      })()`)
+    await waitFor('confirm enabled after typing', async () =>
+      run<boolean>(`document.querySelector('[data-import-confirm]').disabled === false`))
+    check('confirm enabled with text', true)
+
+    // 拖拽合成文件到导入面板 → textarea 填充内容（合成 File 无 .path → FileReader 分支）
+    const dropFilled = await run<boolean>(`
+      (() => {
+        const file = new File(['# Drag Fill\\n\\nbody'], 'drag-fill.md', { type: 'text/markdown' })
+        const dt = new DataTransfer()
+        dt.items.add(file)
+        document.querySelector('[data-import-drop-zone]').dispatchEvent(
+          new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }))
+        return true
+      })()`)
+    check('drop dispatched onto import zone', dropFilled === true)
+    await waitFor('dropped file fills the textarea', async () =>
+      run<boolean>(`(document.querySelector('[data-import-textarea]')?.value ?? '').includes('Drag Fill')`))
+    check('textarea filled from dropped file', true)
+
+    // Esc 关闭
+    await run(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+    await waitFor('import dialog closed by Escape', async () =>
+      run<boolean>(`document.querySelector('[data-import-dialog]') === null`))
+    check('import dialog closes on Escape', true)
   }
 
   // ══════════════ teardown ══════════════

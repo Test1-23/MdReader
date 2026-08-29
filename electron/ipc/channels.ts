@@ -4,6 +4,7 @@
 export const IPC_CHANNELS = {
   // File operations
   FILE_READ: 'file:read',
+  FILE_WRITE: 'file:write',
   FILE_READ_DIR: 'file:readDir',
   FILE_GET_INFO: 'file:getInfo',
   FILE_AUTHORIZE_PATH: 'file:authorizePath',
@@ -11,6 +12,7 @@ export const IPC_CHANNELS = {
   // Dialog operations
   DIALOG_OPEN_FILE: 'dialog:openFile',
   DIALOG_OPEN_FOLDER: 'dialog:openFolder',
+  DIALOG_SAVE_FILE: 'dialog:saveFile',
 
   // Settings operations
   SETTINGS_SAVE: 'settings:saveApiConfig',

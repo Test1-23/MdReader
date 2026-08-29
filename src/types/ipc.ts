@@ -41,6 +41,18 @@ export interface FileReadResult {
   lastModified: number
 }
 
+export interface WriteFileArgs {
+  filePath: string
+  content: string
+  /** false = auto-uniquify on existing file; true = overwrite (dialog-confirmed) */
+  overwrite?: boolean
+}
+
+export interface WriteFileResult {
+  /** effective path — extension enforcement / uniquify may change it */
+  filePath: string
+}
+
 export interface ConversationSummary {
   id: string
   title: string

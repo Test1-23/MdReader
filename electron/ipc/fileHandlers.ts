@@ -1,9 +1,10 @@
 import { IpcMain } from 'electron'
 import { open, readdir, stat } from 'fs/promises'
-import { extname, join, resolve, sep } from 'path'
-import type { FileDirEntry } from '../../src/types/ipc'
+import { extname, join, resolve, sep, parse, format, isAbsolute } from 'path'
+import type { FileDirEntry, WriteFileArgs, WriteFileResult } from '../../src/types/ipc'
 import { IPC_CHANNELS } from './channels'
 import { assertTrustedSender } from './security'
+import { writeFileAtomic } from './fsUtils'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // P7: reject files beyond 20MB with a clear error
 
@@ -38,6 +39,15 @@ const authorizedRoots = new Set<string>()
 function normalizePath(p: string): string {
   const resolved = resolve(p)
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
+async function exists(p: string): Promise<boolean> {
+  try {
+    await stat(p)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function authorizePath(p: string): void {
@@ -92,6 +102,54 @@ export function registerFileHandlers(ipcMain: IpcMain) {
     assertTrustedSender(event)
     if (typeof p === 'string' && p.length > 0) {
       authorizePath(p)
+    }
+  })
+
+  // 写入 .md 文件（导入文本片段落盘）
+  ipcMain.handle(IPC_CHANNELS.FILE_WRITE, async (event, args: WriteFileArgs): Promise<WriteFileResult> => {
+    assertTrustedSender(event)
+    const requested = args?.filePath
+    if (typeof requested !== 'string' || !isAbsolute(requested)) {
+      throw new Error('Invalid target path')
+    }
+    if (typeof args.content !== 'string') {
+      throw new Error('Invalid content')
+    }
+    // 与读取对称的大小上限
+    if (args.content.length > MAX_FILE_SIZE) {
+      throw new Error(`Content too large (${(args.content.length / 1024 / 1024).toFixed(1)}MB, limit 20MB)`)
+    }
+    try {
+      // S6: 仅允许写入用户显式打开过的目录/文件（保存对话框自动授权目标文件）
+      if (!isAuthorized(requested)) {
+        throw new Error('File not authorized — open it via the file dialog, folder explorer, or drag & drop')
+      }
+      // 无扩展名 → 补 .md
+      let effectivePath = requested
+      if (parse(effectivePath).ext === '') {
+        effectivePath = `${effectivePath}.md`
+      }
+      // 非覆盖模式：重名时唯一化 name(1).md、name(2).md…
+      // （单用户桌面应用，唯一化检查存在微小的 TOCTOU 竞态窗口，可接受）
+      if (!args.overwrite) {
+        let candidate = effectivePath
+        let counter = 1
+        while (await exists(candidate)) {
+          const parsed = parse(effectivePath)
+          candidate = format({
+            dir: parsed.dir,
+            name: `${parsed.name}(${counter})`,
+            ext: parsed.ext,
+          })
+          counter++
+        }
+        effectivePath = candidate
+      }
+      await writeFileAtomic(effectivePath, args.content)
+      return { filePath: effectivePath }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to write file: ${requested} — ${msg}`)
     }
   })
 

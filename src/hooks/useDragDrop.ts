@@ -24,6 +24,8 @@ export function useDragDrop() {
       e.preventDefault()
       e.stopPropagation()
       if (!isExternalFileDrag(e)) return
+      // F4: 导入面板是独立 drop zone —— 其上的拖拽不显示全局遮罩、计数不漂移
+      if ((e.target as HTMLElement)?.closest?.('[data-import-drop-zone]')) return
       dragCounter.current++
       if (dragCounter.current === 1) {
         uiDispatch({ type: 'SET_DRAG_OVER', payload: true })
@@ -34,6 +36,7 @@ export function useDragDrop() {
       e.preventDefault()
       e.stopPropagation()
       if (!isExternalFileDrag(e)) return
+      if ((e.target as HTMLElement)?.closest?.('[data-import-drop-zone]')) return
       dragCounter.current--
       if (dragCounter.current <= 0) {
         resetCounter()

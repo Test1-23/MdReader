@@ -1,12 +1,12 @@
 import { IpcMain, app } from 'electron'
-import { readFile, writeFile, readdir, unlink, rename } from 'fs/promises'
+import { readFile, readdir, unlink } from 'fs/promises'
 import { join, isAbsolute, relative } from 'path'
-import { randomBytes } from 'crypto'
 import type { ChatMessage, ChatRequestConfig, ConversationSummary } from '../../src/types/ipc'
 import { IPC_CHANNELS } from './channels'
 import { convDir, ensureDir } from './paths'
 import { getApiKey } from './settingsHandlers'
 import { assertTrustedSender } from './security'
+import { writeFileAtomic } from './fsUtils'
 
 // ---- Active streams (cancellable) ----
 
@@ -321,17 +321,6 @@ function trackWrite(p: Promise<void>): Promise<void> {
     () => { pendingWrites.delete(p) },
   )
   return p
-}
-
-async function writeFileAtomic(target: string, data: string): Promise<void> {
-  const tmp = `${target}.${randomBytes(4).toString('hex')}.tmp`
-  await writeFile(tmp, data, 'utf-8')
-  try {
-    await rename(tmp, target)
-  } catch (err) {
-    await unlink(tmp).catch(() => {})
-    throw err
-  }
 }
 
 async function readIndex(): Promise<{ exists: boolean; list: ConversationSummary[] }> {

@@ -1,12 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from './ipc/channels'
 import type {
-  ApiConfig, PublicApiConfig, ChatRequestConfig, ChatMessage, FileDirEntry, FileReadResult, ConversationSummary,
+  ApiConfig, PublicApiConfig, ChatRequestConfig, ChatMessage, FileDirEntry, FileReadResult,
+  WriteFileArgs, WriteFileResult, ConversationSummary,
 } from '../src/types/ipc'
 
 export interface ElectronAPI {
   // File operations
   readFile: (filePath: string) => Promise<FileReadResult>
+  writeFile: (args: WriteFileArgs) => Promise<WriteFileResult>
   readDir: (dirPath: string) => Promise<FileDirEntry[]>
   getFileInfo: (filePath: string) => Promise<{ size: number; lastModified: number } | null>
   authorizePath: (path: string) => Promise<void>
@@ -14,6 +16,7 @@ export interface ElectronAPI {
   // Dialog operations
   openFileDialog: () => Promise<string | null>
   openFolderDialog: () => Promise<string | null>
+  saveFileDialog: (suggestedName: string) => Promise<string | null>
 
   // Settings operations
   saveApiConfig: (config: ApiConfig) => Promise<void>
@@ -43,12 +46,14 @@ function subscribe<T>(channel: string, cb: (data: T) => void): () => void {
 
 const electronAPI: ElectronAPI = {
   readFile: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.FILE_READ, filePath),
+  writeFile: (args) => ipcRenderer.invoke(IPC_CHANNELS.FILE_WRITE, args),
   readDir: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.FILE_READ_DIR, dirPath),
   getFileInfo: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.FILE_GET_INFO, filePath),
   authorizePath: (path) => ipcRenderer.invoke(IPC_CHANNELS.FILE_AUTHORIZE_PATH, path),
 
   openFileDialog: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FILE),
   openFolderDialog: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FOLDER),
+  saveFileDialog: (suggestedName) => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SAVE_FILE, suggestedName),
 
   saveApiConfig: (config) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SAVE, config),
   loadApiConfig: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_LOAD),

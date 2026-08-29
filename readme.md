@@ -24,6 +24,7 @@
 - Drag & drop `.md` files from the OS
 - Open entire folders and browse in the file tree
 - Paste markdown content directly (`Ctrl+V`)
+- **Import text snippets as `.md` files** — 📥 button in the Explorer toolbar opens an import dialog: paste/type text, pick a `.txt`/`.md` file, or drag one onto the panel; saved with light auto-tidying (first line becomes a heading, blank lines normalized, code fences untouched) into the open folder (auto-named, collision-safe) or via save dialog
 
 ### AI Chat
 - Select text in a document → an inline question box appears at the end of the selection; type your question right there
@@ -90,6 +91,13 @@ npm run build
 - Click any `.md` file to open it in the editor
 - Or drag & drop a `.md` file onto the editor area
 - Or press `Ctrl+V` with markdown text in your clipboard
+
+### Importing Text Snippets
+1. Click **📥 导入** in the Explorer toolbar → the import dialog opens
+2. Paste/type the text, click **选择文件** to pick a `.txt`/`.md` file, or drag a file onto the sidebar panel
+3. Click **转换为 .md** — the text is lightly tidied (first line → heading, blank lines normalized, code fences untouched) and saved
+4. With a folder open, the file lands there with an auto-generated collision-safe name; otherwise a save dialog appears
+5. The new file opens in the editor and appears in the file tree
 
 ### Editor Groups
 - **Split**: Right-click a tab → **Split Right** or **Split Down**
