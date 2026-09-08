@@ -1,6 +1,8 @@
 import { memo, useEffect, useRef } from 'react'
 import type { PendingQuote } from '../../types'
 import { INLINE_TEXTAREA_MAX_H } from './inlineQuote'
+import { Paperclip, X, ArrowUp } from 'lucide-react'
+import { IconButton } from '../shared/IconButton'
 
 interface InlineQuoteBoxProps {
   x: number
@@ -43,7 +45,7 @@ export const InlineQuoteBox = memo(function InlineQuoteBox({
   return (
     <div
       data-inline-quote-box
-      className="fixed z-50 w-[360px] max-w-[calc(100vw-16px)] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-2 flex flex-col gap-1.5"
+      className="fixed z-50 w-[360px] max-w-[calc(100vw-16px)] bg-chrome-raised border border-chrome-border rounded-xl shadow-xl p-2.5 flex flex-col gap-1.5"
       style={{ left: x, top: y }}
     >
       {/* 已引用 mini-chip 列表（本地，提交时才进全局） */}
@@ -56,17 +58,18 @@ export const InlineQuoteBox = memo(function InlineQuoteBox({
               className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-full text-[10px] text-blue-700 dark:text-blue-300 max-w-full"
               title={quote.text}
             >
-              <span className="flex-shrink-0">📎</span>
+              <Paperclip size={12} className="flex-shrink-0" />
               <span className="truncate max-w-[120px]">
                 {quote.text.length > 40 ? `${quote.text.slice(0, 40)}…` : quote.text}
               </span>
-              <button
-                onClick={() => onRemoveQuote(quote.id)}
-                className="flex-shrink-0 w-3.5 h-3.5 flex items-center justify-center rounded-full text-blue-500 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-[10px] leading-none"
+              <IconButton
+                icon={X}
                 title="移除引用"
-              >
-                ×
-              </button>
+                size="xs"
+                round
+                onClick={() => onRemoveQuote(quote.id)}
+                className="!w-3.5 !h-3.5 text-blue-500 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+              />
             </span>
           ))}
         </div>
@@ -88,7 +91,7 @@ export const InlineQuoteBox = memo(function InlineQuoteBox({
         }}
         onCompositionStart={() => { composingRef.current = true }}
         onCompositionEnd={() => { composingRef.current = false }}
-        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 overflow-y-auto"
+        className="w-full px-2.5 py-1.5 text-[13px] border border-chrome-border rounded-lg bg-chrome-surface text-chrome-text resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 overflow-y-auto"
       />
 
       {/* 提交按钮 */}
@@ -96,10 +99,10 @@ export const InlineQuoteBox = memo(function InlineQuoteBox({
         <button
           data-inline-submit
           onClick={submit}
-          className="w-7 h-7 flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white rounded-full text-sm transition-colors"
+          className="w-7 h-7 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors"
           title="填入 AI 窗口（Ctrl+Enter）"
         >
-          ↑
+          <ArrowUp size={14} />
         </button>
       </div>
     </div>

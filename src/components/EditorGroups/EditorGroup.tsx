@@ -3,12 +3,14 @@ import { useLayoutContext, useUIDispatch } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
 import { readDroppedMarkdownFiles, generateTabId, openFileByPath } from '../../utils/fileReader'
 import type { EditorGroup as EditorGroupType, SplitPosition } from '../../types'
+import { X } from 'lucide-react'
 import { GroupTabs } from './GroupTabs'
 import { GroupContent } from './GroupContent'
+import { IconButton } from '../shared/IconButton'
 
 type DropZone = SplitPosition | 'center' | null
 
-const TAB_BAR_HEIGHT = 36
+const TAB_BAR_HEIGHT = 40
 const EDGE_PCT = 10
 
 interface CachedRect {
@@ -208,24 +210,21 @@ export function EditorGroup({ group }: EditorGroupProps) {
         <div className="flex-1 min-w-0">
           <GroupTabs group={group} isActive={isActive} />
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            layoutDispatch({ type: 'CLOSE_GROUP', payload: { groupId: group.id } })
-          }}
-          className="flex-shrink-0 w-7 flex items-center justify-center bg-gray-200 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors text-sm"
+        <IconButton
+          icon={X}
           title="Close Group"
-        >
-          ×
-        </button>
+          size="lg"
+          onClick={() => layoutDispatch({ type: 'CLOSE_GROUP', payload: { groupId: group.id } })}
+          className="flex-shrink-0 w-9 h-full rounded-none rounded-r-lg bg-chrome-subtle border-b border-chrome-border"
+        />
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden bg-white dark:bg-gray-900">
+      <div className="flex-1 overflow-hidden bg-chrome-surface">
         {activeTab ? (
           <GroupContent tab={activeTab} />
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 text-sm">
+          <div className="h-full flex items-center justify-center text-chrome-text-faint text-sm">
             <div className="text-center">
               <p className="text-lg mb-2">No file open</p>
               <p className="text-xs">Open a file from the Explorer or drop a file here</p>
@@ -234,16 +233,16 @@ export function EditorGroup({ group }: EditorGroupProps) {
         )}
       </div>
 
-      {/* VS Code-style edge drop zone highlight */}
+      {/* Edge drop zone highlight */}
       {dropZone && dropZone !== 'center' && (
         <div className="absolute inset-0 pointer-events-none z-10">
           <div
             className={`
               absolute bg-blue-500/20 border-2 border-blue-400
-              ${dropZone === 'left'   ? 'left-0 top-0 bottom-0 w-[20%] rounded-l' : ''}
-              ${dropZone === 'right'  ? 'right-0 top-0 bottom-0 w-[20%] rounded-r' : ''}
-              ${dropZone === 'top'    ? 'top-0 left-0 right-0 h-[20%] rounded-t' : ''}
-              ${dropZone === 'bottom' ? 'bottom-0 left-0 right-0 h-[20%] rounded-b' : ''}
+              ${dropZone === 'left'   ? 'left-0 top-0 bottom-0 w-[20%] rounded-l-lg' : ''}
+              ${dropZone === 'right'  ? 'right-0 top-0 bottom-0 w-[20%] rounded-r-lg' : ''}
+              ${dropZone === 'top'    ? 'top-0 left-0 right-0 h-[20%] rounded-t-lg' : ''}
+              ${dropZone === 'bottom' ? 'bottom-0 left-0 right-0 h-[20%] rounded-b-lg' : ''}
             `}
           />
         </div>

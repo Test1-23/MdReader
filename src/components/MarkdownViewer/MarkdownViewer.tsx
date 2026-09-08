@@ -59,7 +59,8 @@ function CodeRenderer({ className, children, ...props }: any) {
       language={match ? match[1] : 'text'}
       PreTag="div"
       customStyle={{
-        borderRadius: '8px',
+        borderRadius: '12px',
+        padding: '16px 20px',
         fontSize: '13px',
         lineHeight: '1.6',
       }}

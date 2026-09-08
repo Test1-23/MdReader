@@ -16,7 +16,7 @@ export function GroupContent({ tab }: GroupContentProps) {
   // AI 对话窗口 → 渲染聊天界面（作为布局树中的 tab）
   if (tab.fileId === AI_WINDOW_ID) {
     return (
-      <div className="h-full overflow-hidden bg-white dark:bg-gray-900">
+      <div className="h-full overflow-hidden bg-chrome-surface">
         <AIChatPanel tabId={tab.id} />
       </div>
     )

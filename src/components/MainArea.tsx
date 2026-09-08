@@ -14,7 +14,7 @@ export function MainArea() {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-editor-bg">
+    <div className="flex-1 flex flex-col overflow-hidden bg-chrome-surface">
       <EditorGroupTree node={state.layoutRoot} />
     </div>
   )

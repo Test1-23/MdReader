@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useAIContext } from '../../context/AppContext'
 import type { Conversation } from '../../utils/conversationTree'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { IconButton } from '../shared/IconButton'
 
 interface ConversationListProps {
   conv: Conversation | null
@@ -34,19 +36,20 @@ export function ConversationList({ conv, onSelect, onRename, onDelete, onNew }: 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* 新建对话 */}
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+      <div className="px-3 py-2 border-b border-chrome-border">
         <button
           onClick={onNew}
-          className="w-full px-3 py-1.5 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
         >
-          ✏️ 新建对话
+          <Plus size={14} />
+          新建对话
         </button>
       </div>
 
       {/* 对话列表 */}
       <div className="flex-1 overflow-y-auto py-1">
         {state.conversationList.length === 0 && (
-          <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-600">
+          <div className="px-4 py-8 text-center text-xs text-chrome-text-faint">
             暂无已保存的对话
           </div>
         )}
@@ -58,8 +61,8 @@ export function ConversationList({ conv, onSelect, onRename, onDelete, onNew }: 
             <div
               key={item.id}
               className={`
-                group flex items-center gap-1 px-3 py-1.5 cursor-pointer transition-colors
-                ${isCurrent ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}
+                group flex items-center gap-1 px-3 py-2 rounded-lg cursor-pointer transition-colors
+                ${isCurrent ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-chrome-hover'}
               `}
               onClick={() => !isRenaming && !isConfirming && onSelect(item.id)}
             >
@@ -102,20 +105,20 @@ export function ConversationList({ conv, onSelect, onRename, onDelete, onNew }: 
                     </div>
                   </div>
                   {/* hover 操作 */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); startRename(item.id, item.title) }}
-                    className="opacity-0 group-hover:opacity-100 text-blue-500 hover:text-blue-700 text-xs px-1"
+                  <IconButton
+                    icon={Pencil}
                     title="重命名"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(item.id) }}
-                    className="opacity-0 group-hover:opacity-100 text-blue-500 hover:text-red-500 text-xs px-1"
+                    size="sm"
+                    onClick={() => startRename(item.id, item.title)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  />
+                  <IconButton
+                    icon={Trash2}
                     title="删除"
-                  >
-                    🗑
-                  </button>
+                    size="sm"
+                    onClick={() => setConfirmDeleteId(item.id)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity hover:!text-red-500"
+                  />
                 </>
               )}
             </div>

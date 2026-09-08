@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import type { PendingQuote } from '../../types'
 import { useUIDispatch } from '../../context/AppContext'
+import { Paperclip, X, Brain, ArrowUp } from 'lucide-react'
+import { IconButton } from '../shared/IconButton'
 
 interface ChatInputProps {
   pendingQuotes: PendingQuote[]
@@ -57,7 +59,7 @@ export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onS
   }
 
   return (
-    <div className="border-t border-gray-200 dark:border-gray-700 p-3">
+    <div className="border-t border-chrome-border p-3">
       {/* 多条引用 chip 列表（可逐条删除） */}
       {pendingQuotes.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1 max-h-16 overflow-y-auto">
@@ -68,17 +70,18 @@ export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onS
               className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-full text-[10px] text-blue-700 dark:text-blue-300 max-w-full"
               title={quote.text}
             >
-              <span className="flex-shrink-0">📎</span>
+              <Paperclip size={12} className="flex-shrink-0" />
               <span className="truncate max-w-[180px]">
                 {quote.text.length > 80 ? `${quote.text.slice(0, 80)}…` : quote.text}
               </span>
-              <button
-                onClick={() => onRemoveQuote(quote.id)}
-                className="flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-blue-500 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+              <IconButton
+                icon={X}
                 title="移除引用"
-              >
-                ×
-              </button>
+                size="xs"
+                round
+                onClick={() => onRemoveQuote(quote.id)}
+                className="!w-4 !h-4 text-blue-500 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+              />
             </span>
           ))}
         </div>
@@ -88,14 +91,15 @@ export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onS
         <button
           onClick={() => setDeepThink(!deepThink)}
           className={`
-            px-3 py-1 rounded-full text-[10px] border transition-colors
+            inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] border transition-colors
             ${deepThink
-              ? 'bg-blue-500 text-white border-blue-500'
-              : 'text-blue-500 border-blue-300 hover:bg-blue-50 dark:border-blue-600 dark:hover:bg-blue-900/30'}
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'text-blue-600 border-blue-300 hover:bg-blue-50 dark:border-blue-600 dark:hover:bg-blue-900/30'}
           `}
           title="深度思考"
         >
-          🧠 深度思考
+          <Brain size={14} />
+          深度思考
         </button>
       </div>
       {/* DeepSeek 风格：大圆角输入框 + 右下角内嵌按钮 */}
@@ -108,7 +112,7 @@ export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onS
           onKeyDown={handleKeyDown}
           placeholder="Ask about the selected text..."
           rows={2}
-          className="w-full px-4 py-3 pr-12 text-xs border border-gray-300 dark:border-gray-600 rounded-2xl bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-shadow"
+          className="w-full px-4 py-3 pr-12 text-[13px] border border-chrome-border rounded-2xl bg-chrome-surface text-chrome-text resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-shadow"
         />
         {/* 发送 / 停止按钮（内嵌右下角，蓝色主题） */}
         <button
@@ -117,14 +121,14 @@ export function ChatInput({ pendingQuotes, onRemoveQuote, onSend, streaming, onS
           className={`
             absolute right-2 bottom-2 w-8 h-8 flex items-center justify-center transition-colors
             ${streaming
-              ? 'bg-blue-500 text-white hover:bg-red-500 rounded-md'
-              : 'bg-blue-500 text-white hover:bg-blue-600 rounded-full'
+              ? 'bg-blue-600 text-white hover:bg-red-500 rounded-md'
+              : 'bg-blue-600 text-white hover:bg-blue-700 rounded-full'
             }
             ${!streaming && !input.trim() ? 'bg-blue-200 text-blue-400 cursor-not-allowed hover:bg-blue-200' : ''}
           `}
           title={streaming ? '停止生成' : '发送'}
         >
-          {streaming ? <span className="w-2.5 h-2.5 bg-current rounded-[2px]" /> : <span className="text-sm leading-none">↑</span>}
+          {streaming ? <span className="w-2.5 h-2.5 bg-current rounded-[2px]" /> : <ArrowUp size={16} />}
         </button>
       </div>
     </div>

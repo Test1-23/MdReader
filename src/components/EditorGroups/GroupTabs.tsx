@@ -46,10 +46,9 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
   return (
     <div
       className={`
-        flex items-end overflow-x-auto bg-gray-200 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700
+        flex items-end overflow-x-auto bg-chrome-subtle border-b border-chrome-border h-full
         ${isActive ? '' : 'opacity-90'}
       `}
-      style={{ height: '36px' }}
     >
       {group.tabs.map((tab) => (
         <GroupTab
@@ -69,7 +68,7 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
       {/* Context Menu */}
       {contextMenu && (
         <div
-          className="fixed bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-lg py-1 z-50 text-sm"
+          className="fixed bg-chrome-raised border border-chrome-border rounded-lg shadow-lg py-1 z-50 text-sm"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <div

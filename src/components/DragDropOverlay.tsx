@@ -1,4 +1,5 @@
 import { useUIContext } from '../context/AppContext'
+import { Download } from 'lucide-react'
 
 export function DragDropOverlay() {
   const { state } = useUIContext()
@@ -7,13 +8,12 @@ export function DragDropOverlay() {
 
   return (
     <div className="fixed inset-0 z-50 bg-blue-500/10 flex items-center justify-center pointer-events-none">
-      {/* B20i: dark-mode variants */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl px-12 py-10 text-center border-2 border-dashed border-blue-400">
-        <div className="text-5xl mb-4">📥</div>
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2">
+      <div className="bg-chrome-raised rounded-2xl shadow-2xl px-12 py-10 text-center border-2 border-dashed border-blue-400">
+        <Download size={48} className="mx-auto mb-4 text-blue-500" />
+        <h2 className="text-xl font-semibold text-chrome-text mb-2">
           Drop your Markdown file here
         </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <p className="text-sm text-chrome-text-muted">
           Supports .md, .markdown, .mdown, .mkd, and .txt files
         </p>
       </div>

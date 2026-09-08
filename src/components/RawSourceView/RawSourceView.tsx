@@ -9,10 +9,10 @@ export const RawSourceView = memo(function RawSourceView({ content }: RawSourceV
   const lines = content.split('\n')
 
   return (
-    <div className="h-full overflow-auto bg-gray-50 dark:bg-gray-950 font-mono text-sm">
+    <div className="h-full overflow-auto bg-chrome-subtle font-mono text-sm">
       <div className="flex">
         {/* Line numbers */}
-        <div className="flex-shrink-0 py-3 select-none text-right text-gray-400 bg-gray-100 border-r border-gray-200">
+        <div className="flex-shrink-0 py-3 select-none text-right text-chrome-text-faint bg-chrome-subtle border-r border-chrome-border">
           {lines.map((_, i) => (
             <div
               key={i}
@@ -25,7 +25,7 @@ export const RawSourceView = memo(function RawSourceView({ content }: RawSourceV
         </div>
 
         {/* Code content */}
-        <pre className="flex-1 py-3 px-4 overflow-x-auto leading-6 text-gray-800 m-0">
+        <pre className="flex-1 py-3 px-4 overflow-x-auto leading-6 text-chrome-text m-0">
           <code>
             {lines.map((line, i) => (
               <div key={i} className="whitespace-pre">

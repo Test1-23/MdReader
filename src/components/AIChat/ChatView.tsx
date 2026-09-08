@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import type { Conversation, ChatNode } from '../../utils/conversationTree'
 import { getActivePath } from '../../utils/conversationTree'
+import { CornerDownRight } from 'lucide-react'
 import { ChatBubble } from './ChatBubble'
 import { EmptyChat } from './EmptyChat'
 
@@ -81,9 +82,10 @@ export const ChatView = memo(function ChatView({ conv, activeNodeId, loading, on
             <button
               key={branch.id}
               onClick={() => onSwitchBranch(branch.id)}
-              className="ml-8 my-0.5 px-2 py-0.5 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+              className="ml-10 my-0.5 inline-flex items-center gap-1 px-2 py-0.5 text-[11px] text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 rounded-md hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
             >
-              ↪ 分支 {new Date(branch.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <CornerDownRight size={12} />
+              分支 {new Date(branch.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </button>
           ))}
         </div>

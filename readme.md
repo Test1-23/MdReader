@@ -31,14 +31,14 @@
 - Drag & drop `.md` files from the OS
 - Open entire folders and browse in the file tree
 - Paste markdown content directly (`Ctrl+V`)
-- **Import text snippets as `.md` files** — 📥 button in the Explorer toolbar opens an import dialog: paste/type text, pick a `.txt`/`.md` file, or drag one onto the panel; saved with light auto-tidying (first line becomes a heading, blank lines normalized, code fences untouched) into the open folder (auto-named, collision-safe) or via save dialog
+- **Import text snippets as `.md` files** — the Import button in the Explorer toolbar opens an import dialog: paste/type text, pick a `.txt`/`.md` file, or drag one onto the panel; saved with light auto-tidying (first line becomes a heading, blank lines normalized, code fences untouched) into the open folder (auto-named, collision-safe) or via save dialog
 
 ### AI Chat
 - Select text in a document → an inline question box appears at the end of the selection; type your question right there
 - Keep selecting more text while the box is open to accumulate multiple quotes (shown as removable chips)
-- **Ctrl+Enter** (or ↑) fills your question into the AI window's input — nothing is sent until you confirm there
+- **Ctrl+Enter** (or the arrow-up button) fills your question into the AI window's input — nothing is sent until you confirm there
 - The full document is included as context; all quotes attach to your next message
-- 💬 button in the Activity Bar opens a NEW independent AI window split below the focused pane — each window has its own conversation and history
+- The New AI Chat button in the Activity Bar opens a NEW independent AI window split below the focused pane — each window has its own conversation and history
 - Streaming AI replies (SSE via Electron IPC)
 - Conversation tree with branching — backtrack to any point and create new branches
 - Git-style tree diagram visualization
@@ -47,13 +47,15 @@
 - Deep thinking (reasoning) support — collapsible `reasoning_content` block
 - Conversation management: save, load, rename, delete conversations (atomic writes, auto-repair on load)
 - Settings panel for API endpoint, key, and model (encrypted via Electron `safeStorage`; the key never enters the renderer)
-- 🧠 Deep Think sends `chat_template_kwargs: {thinking: true}` (DeepSeek-compatible; ignored by providers that don't support it)
+- Deep Think sends `chat_template_kwargs: {thinking: true}` (DeepSeek-compatible; ignored by providers that don't support it)
 
 ### UI/UX
-- Dark mode with system-adaptive styling
+- Dark mode with system-adaptive styling (semantic chrome tokens)
+- Modern soft design — rounded corners, soft shadows, unified panel headers/toolbars/buttons
+- lucide-react icon set throughout (no emoji)
 - VS Code-style drag handles for pane resizing
 - DeepSeek-style chat input with circular send/stop button
-- Blue button theme throughout
+- Blue accent theme throughout
 
 ## Tech Stack
 
@@ -95,13 +97,13 @@ npm run build
 ## Usage
 
 ### Opening Files
-- Click **📁 Explorer** in the Activity Bar → **Open Folder** to browse directories
+- Click **Explorer** in the Activity Bar → **Open Folder** to browse directories
 - Click any `.md` file to open it in the editor
 - Or drag & drop a `.md` file onto the editor area
 - Or press `Ctrl+V` with markdown text in your clipboard
 
 ### Importing Text Snippets
-1. Click **📥 导入** in the Explorer toolbar → the import dialog opens
+1. Click the **Import** button in the Explorer toolbar → the import dialog opens
 2. Paste/type the text, click **选择文件** to pick a `.txt`/`.md` file, or drag a file onto the sidebar panel
 3. Click **转换为 .md** — the text is lightly tidied (first line → heading, blank lines normalized, code fences untouched) and saved
 4. With a folder open, the file lands there with an auto-generated collision-safe name; otherwise a save dialog appears
@@ -111,20 +113,20 @@ npm run build
 - **Split**: Right-click a tab → **Split Right** or **Split Down**
 - **Drag to split**: Drag a tab to the edge of a pane to create a new split
 - **Move tabs**: Drag tabs between groups or within a group to reorder
-- **Close**: Click × on a tab to close it; click × on the group header to close the entire group
-- **Outline**: Click **📑 Outline** in the Activity Bar to see document headings
+- **Close**: Click the close button on a tab to close it; the same button on the group header closes the entire group
+- **Outline**: Click **Outline** in the Activity Bar to see document headings
 
 ### AI Chat
-1. Click **⚙️ Settings** in the Activity Bar → configure your API endpoint, key, and model
-2. Select text in any open markdown document → an **inline question box** appears at the end of the selection; select more text while it's open to accumulate quotes (chips shown in the box, removable with ×)
-3. Type your question (**Enter** adds a new line) and press **Ctrl+Enter** or click **↑** — the AI window opens (or focuses) at the far right with your question filled in and the quotes as chips
-4. Review and press **Enter** or **↑ Send** in the AI window — all quotes are attached to the message
+1. Click **Settings** in the Activity Bar → configure your API endpoint, key, and model
+2. Select text in any open markdown document → an **inline question box** appears at the end of the selection; select more text while it's open to accumulate quotes (chips shown in the box, each removable)
+3. Type your question (**Enter** adds a new line) and press **Ctrl+Enter** or click the arrow-up button — the AI window opens (or focuses) at the far right with your question filled in and the quotes as chips
+4. Review and press **Enter** or the **Send** button in the AI window — all quotes are attached to the message
 5. **Esc** / click elsewhere / scroll dismisses the inline box and discards its text and quotes
-6. Click **💬** in the Activity Bar to open an additional independent AI window below the focused pane
+6. Click the **New AI Chat** button in the Activity Bar to open an additional independent AI window below the focused pane
 7. The AI receives the full document as context plus your quotes
-8. Use **🧠 Deep Think** to enable reasoning mode (DeepSeek R1)
-9. Click **🗂 Conversations** to manage saved conversations
-10. Use **🌳 Tree View** to navigate conversation branches
+8. Use **Deep Think** to enable reasoning mode (DeepSeek R1)
+9. Click the **Conversations** view toggle to manage saved conversations
+10. Use the **Tree View** toggle to navigate conversation branches
 
 ### Keyboard Shortcuts
 

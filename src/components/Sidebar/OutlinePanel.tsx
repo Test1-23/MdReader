@@ -19,7 +19,7 @@ export function OutlinePanel() {
 
   if (!activeFile) {
     return (
-      <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
+      <div className="px-4 py-8 text-center text-xs text-chrome-text-faint">
         Open a markdown file to see its outline
       </div>
     )
@@ -27,7 +27,7 @@ export function OutlinePanel() {
 
   if (headings.length === 0) {
     return (
-      <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
+      <div className="px-4 py-8 text-center text-xs text-chrome-text-faint">
         No headings found in this document
       </div>
     )
@@ -55,11 +55,11 @@ export function OutlinePanel() {
             // include the line number — duplicated headings share the same id
             key={`${id}-${heading.line}`}
             onClick={() => handleClick(heading.text)}
-            className="w-full text-left px-2 py-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-300 truncate block transition-colors"
+            className="w-full text-left px-2.5 py-1 rounded-md hover:bg-chrome-hover text-[13px] text-chrome-text truncate block transition-colors"
             style={{ paddingLeft: `${8 + (heading.level - 1) * 16}px` }}
             title={heading.text}
           >
-            <span className="text-gray-400 dark:text-gray-500 mr-1">H{heading.level}</span>
+            <span className="text-chrome-text-faint mr-1">H{heading.level}</span>
             {heading.text}
           </button>
         )

@@ -1,6 +1,8 @@
 import { useCallback } from 'react'
 import type { TabEntry } from '../../types'
 import { AI_WINDOW_ID } from '../../utils/windowDescriptor'
+import { MessageSquare, Eye, FileCode2, X } from 'lucide-react'
+import { IconButton } from '../shared/IconButton'
 
 interface GroupTabProps {
   tab: TabEntry
@@ -21,6 +23,10 @@ export function GroupTab({ tab, groupId, isActive, onClick, onClose, onContextMe
     [tab.id, groupId]
   )
 
+  const TabIcon = tab.fileId === AI_WINDOW_ID
+    ? MessageSquare
+    : (tab.viewMode === 'preview' ? Eye : FileCode2)
+
   return (
     <div
       draggable
@@ -28,20 +34,18 @@ export function GroupTab({ tab, groupId, isActive, onClick, onClose, onContextMe
       onClick={onClick}
       onContextMenu={onContextMenu}
       className={`
-        group flex items-center gap-1.5 px-3 py-1.5 text-xs cursor-pointer select-none
-        border-r border-gray-300 min-w-0 max-w-[200px]
+        group flex items-center gap-1.5 px-3 py-2 text-[13px] cursor-pointer select-none
+        border-r border-chrome-border min-w-0 max-w-[200px] rounded-t-lg mx-0.5 mt-1.5
         transition-colors duration-75
         ${isActive
-          ? 'bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 border-t-2 border-t-blue-500'
-          : 'bg-[#ececec] dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+          ? 'bg-chrome-surface text-chrome-text shadow-sm border-t-2 border-t-blue-500'
+          : 'bg-chrome-subtle text-chrome-text-muted hover:bg-chrome-hover'
         }
       `}
       title={tab.filePath || tab.fileName}
     >
-      {/* File icon */}
-      <span className="text-sm flex-shrink-0">
-        {tab.fileId === AI_WINDOW_ID ? '💬' : (tab.viewMode === 'preview' ? '📝' : '📋')}
-      </span>
+      {/* Tab icon */}
+      <TabIcon size={14} className="flex-shrink-0 text-chrome-text-faint" />
 
       {/* File name */}
       <span className="truncate flex-1">{tab.fileName}</span>
@@ -52,21 +56,13 @@ export function GroupTab({ tab, groupId, isActive, onClick, onClose, onContextMe
       )}
 
       {/* Close button */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onClose()
-        }}
-        className={`
-          flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-sm
-          text-gray-400 hover:text-gray-700 hover:bg-gray-300
-          ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
-          transition-opacity
-        `}
+      <IconButton
+        icon={X}
         title="Close"
-      >
-        ×
-      </button>
+        size="sm"
+        onClick={onClose}
+        className={`flex-shrink-0 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
+      />
     </div>
   )
 }

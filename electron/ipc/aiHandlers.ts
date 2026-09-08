@@ -50,7 +50,7 @@ async function requireApiKey(): Promise<string> {
   // S1: the key never enters the renderer — read it from disk here.
   const apiKey = await getApiKey()
   if (!apiKey) {
-    throw new Error('API key not configured — open Settings (⚙️) and save your API key')
+    throw new Error('API key not configured — open Settings in the Activity Bar and save your API key')
   }
   return apiKey
 }

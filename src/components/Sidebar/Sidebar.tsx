@@ -1,17 +1,24 @@
 import { useUIContext } from '../../context/AppContext'
+import { Files, ListTree, Settings, Sun, Moon } from 'lucide-react'
 import { FileTreePanel } from './FileTreePanel'
 import { OutlinePanel } from './OutlinePanel'
 import { SettingsPanel } from './SettingsPanel'
+import { PanelHeader } from '../shared/PanelHeader'
+
+const PANEL_META = {
+  files: { title: 'Explorer', icon: Files },
+  outline: { title: 'Outline', icon: ListTree },
+  settings: { title: 'Settings', icon: Settings },
+} as const
 
 export function Sidebar() {
   const { state, dispatch } = useUIContext()
+  const meta = PANEL_META[state.activeActivity]
 
   return (
-    <div className="w-sidebar min-w-sidebar border-r border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex flex-col overflow-hidden select-none">
+    <div className="w-sidebar min-w-sidebar border-r border-chrome-border bg-chrome-subtle flex flex-col overflow-hidden select-none">
       {/* Panel Header */}
-      <div className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-        {state.activeActivity === 'files' ? 'Explorer' : state.activeActivity === 'outline' ? 'Outline' : 'Settings'}
-      </div>
+      <PanelHeader icon={meta.icon} title={meta.title} />
 
       {/* Panel Content */}
       <div className="flex-1 overflow-y-auto">
@@ -21,12 +28,12 @@ export function Sidebar() {
       </div>
 
       {/* Dark Mode Toggle */}
-      <div className="px-3 py-2 border-t border-gray-300 dark:border-gray-700">
+      <div className="px-3 py-2 border-t border-chrome-border">
         <button
           onClick={() => dispatch({ type: 'TOGGLE_DARK_MODE' })}
-          className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
+          className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-[13px] hover:bg-chrome-hover text-chrome-text-muted transition-colors"
         >
-          <span>{state.darkMode ? '☀️' : '🌙'}</span>
+          {state.darkMode ? <Sun size={14} /> : <Moon size={14} />}
           <span>{state.darkMode ? 'Light Mode' : 'Dark Mode'}</span>
         </button>
       </div>

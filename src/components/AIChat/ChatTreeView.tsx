@@ -3,6 +3,7 @@ import type { Conversation } from '../../utils/conversationTree'
 import { getActivePath } from '../../utils/conversationTree'
 import { computeTreeLayout, NODE_RADIUS } from '../../utils/treeLayout'
 import type { TreeLayoutNode } from '../../utils/treeLayout'
+import { Plus, Minus, User, Bot } from 'lucide-react'
 import { EmptyChat } from './EmptyChat'
 
 interface ChatTreeViewProps {
@@ -62,12 +63,12 @@ export const ChatTreeView = memo(function ChatTreeView({ conv, activeNodeId, onS
               absolute w-4 h-4 flex items-center justify-center rounded-full text-[10px] leading-none
               -left-5 top-0.5 border transition-colors
               ${node.collapsed
-                ? 'bg-white dark:bg-gray-800 border-gray-400 text-gray-500 dark:text-gray-400 hover:border-blue-500 hover:text-blue-500'
-                : 'bg-blue-500 border-blue-500 text-white'}
+                ? 'bg-chrome-raised border-chrome-border-strong text-chrome-text-muted hover:border-blue-500 hover:text-blue-500'
+                : 'bg-blue-600 border-blue-600 text-white'}
             `}
             title={node.collapsed ? 'Expand' : 'Collapse'}
           >
-            {node.collapsed ? '+' : '−'}
+            {node.collapsed ? <Plus size={12} /> : <Minus size={12} />}
           </button>
         )}
 
@@ -76,10 +77,10 @@ export const ChatTreeView = memo(function ChatTreeView({ conv, activeNodeId, onS
           className={`
             absolute rounded-full border-2
             ${isCurrent
-              ? 'bg-blue-500 border-blue-300'
+              ? 'bg-blue-600 border-blue-300'
               : isActive
                 ? 'bg-blue-200 dark:bg-blue-800 border-blue-500'
-                : 'bg-white dark:bg-gray-800 border-gray-400 dark:border-gray-600'
+                : 'bg-chrome-raised border-chrome-border-strong'
             }
           `}
           style={{ width: NODE_RADIUS * 2, height: NODE_RADIUS * 2, left: 0, top: 0 }}
@@ -102,13 +103,13 @@ export const ChatTreeView = memo(function ChatTreeView({ conv, activeNodeId, onS
 
         {/* Hover 详情浮层（位于节点下方，不遮挡节点） */}
         {isHovered && (
-          <div className="absolute left-6 top-8 z-20 w-64 max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-2 text-[11px]">
-            <div className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
-              <span className="font-semibold">👤 </span>{node.user.content}
+          <div className="absolute left-6 top-8 z-20 w-64 max-h-48 overflow-y-auto bg-chrome-raised border border-chrome-border rounded-xl shadow-lg p-2 text-[11px]">
+            <div className="text-chrome-text whitespace-pre-wrap break-words">
+              <User size={12} className="inline mr-1" />{node.user.content}
             </div>
             {node.assistant && (
-              <div className="mt-1.5 pt-1.5 border-t border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 whitespace-pre-wrap break-words">
-                <span className="font-semibold">🤖 </span>{node.assistant.content}
+              <div className="mt-1.5 pt-1.5 border-t border-chrome-border text-chrome-text-muted whitespace-pre-wrap break-words">
+                <Bot size={12} className="inline mr-1" />{node.assistant.content}
               </div>
             )}
           </div>
@@ -126,7 +127,7 @@ export const ChatTreeView = memo(function ChatTreeView({ conv, activeNodeId, onS
   }
 
   return (
-    <div className="flex-1 overflow-auto bg-white dark:bg-gray-900">
+    <div className="flex-1 overflow-auto bg-chrome-surface">
       <div style={{ width: layout.width, height: layout.height, position: 'relative' }}>
         {/* SVG 连线层 */}
         <svg

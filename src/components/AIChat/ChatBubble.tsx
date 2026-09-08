@@ -1,6 +1,9 @@
 import { useEffect, useState, useRef, memo } from 'react'
 import type { ChatNode } from '../../utils/conversationTree'
 import { BTN_BASE } from '../shared/classes'
+import {
+  User, Bot, ChevronDown, ChevronRight, Clipboard, Check, Pencil, RefreshCw, Loader2,
+} from 'lucide-react'
 
 interface ChatBubbleProps {
   node: ChatNode
@@ -105,21 +108,21 @@ export const ChatBubble = memo(function ChatBubble({
   }
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} px-3 py-1.5`}>
+    <div className={`group flex ${isUser ? 'justify-end' : 'justify-start'} px-4 py-2`}>
       <div className={`max-w-[85%] ${isUser ? 'flex flex-col items-end' : 'flex flex-col items-start'}`}>
         <div
           className={`
-            px-3 py-2 rounded-lg text-xs w-full
+            px-4 py-2.5 rounded-2xl text-[13px] w-full shadow-sm
             ${isUser
-              ? 'bg-blue-500 text-white rounded-br-none'
-              : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-none'
+              ? 'bg-blue-600 text-white rounded-br-md'
+              : 'bg-chrome-subtle text-chrome-text rounded-bl-md'
             }
             ${isActive ? 'ring-2 ring-blue-400' : ''}
           `}
         >
           {/* 头部：角色 + 时间 */}
-          <div className="flex items-center gap-1.5 mb-1 opacity-70">
-            <span>{isUser ? '👤' : '🤖'}</span>
+          <div className={`flex items-center gap-1.5 mb-1 ${isUser ? 'text-blue-100' : 'text-chrome-text-faint'}`}>
+            {isUser ? <User size={12} /> : <Bot size={12} />}
             <span className="font-semibold">{isUser ? 'You' : 'AI'}</span>
             <span className="text-[10px]">
               {new Date(node.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -129,14 +132,14 @@ export const ChatBubble = memo(function ChatBubble({
           {node.selectedTexts?.map((text, i) => (
             <div
               key={i}
-              className="mb-1.5 p-1.5 bg-black/10 dark:bg-white/10 rounded text-[10px] italic whitespace-pre-wrap"
+              className="mb-1.5 p-1.5 bg-black/10 dark:bg-white/10 rounded-lg text-[10px] italic whitespace-pre-wrap"
             >
               {text}
             </div>
           ))}
-          {/* 可折叠思考块（DeepSeek 风格：粗箭头 + 耗时） */}
+          {/* 可折叠思考块（耗时） */}
           {!isUser && node.reasoning && (
-            <div className="mb-1.5 rounded bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
+            <div className="mb-1.5 rounded-lg bg-chrome-surface/60 border border-chrome-border">
               <button
                 onClick={() => {
                   const next = !thinkingOpen
@@ -145,16 +148,16 @@ export const ChatBubble = memo(function ChatBubble({
                   // reasoning chunk force-reopens the block mid-stream
                   userExpandedRef.current = next
                 }}
-                className="w-full px-2 py-1 text-left text-[10px] text-gray-500 dark:text-gray-400 transition-colors"
+                className="w-full px-2 py-1 flex items-center gap-1 text-left text-[10px] text-chrome-text-muted transition-colors"
               >
-                <span className="font-bold">{thinkingOpen ? '▾' : '▸'}</span>
-                {' '}已深度思考
+                {thinkingOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                <span>已深度思考</span>
                 {node.reasoningDuration
                   ? `（用时 ${Math.round(node.reasoningDuration / 1000)}s）`
                   : loading ? '...' : ''}
               </button>
               {thinkingOpen && (
-                <div className="px-2 pb-1.5 text-[10px] text-gray-400 dark:text-gray-500 whitespace-pre-wrap break-words">
+                <div className="px-2 pb-1.5 text-[10px] text-chrome-text-faint whitespace-pre-wrap break-words">
                   {node.reasoning}
                 </div>
               )}
@@ -164,42 +167,46 @@ export const ChatBubble = memo(function ChatBubble({
           <div className="whitespace-pre-wrap break-words">{node.content}</div>
         </div>
 
-        {/* 常驻操作按钮（蓝色主题） */}
-        <div className="flex gap-1 mt-0.5 px-1">
+        {/* 操作按钮：hover 显隐（视觉层级） */}
+        <div className="flex gap-1 mt-0.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={handleCopyClick}
-            className={`${BTN_BASE} text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 ${copied ? '!text-green-500 !bg-green-50 dark:!bg-green-900/30' : ''}`}
+            className={`${BTN_BASE} text-chrome-text-faint hover:text-chrome-text hover:bg-chrome-hover ${copied ? '!text-green-500' : ''}`}
             title="复制"
           >
-            {copied ? '✓ 已复制' : '📋 复制'}
+            {copied ? <Check size={12} /> : <Clipboard size={12} />}
+            {copied ? '已复制' : '复制'}
           </button>
           {isUser ? (
             <>
               <button
                 onClick={() => onEditStart(node.id)}
                 disabled={loading}
-                className={`${BTN_BASE} text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30`}
+                className={`${BTN_BASE} text-chrome-text-faint hover:text-chrome-text hover:bg-chrome-hover`}
                 title="编辑"
               >
-                ✏️ 编辑
+                <Pencil size={12} />
+                编辑
               </button>
               <button
                 onClick={() => onRegenerate(node.id)}
                 disabled={loading}
-                className={`${BTN_BASE} text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30`}
+                className={`${BTN_BASE} text-chrome-text-faint hover:text-chrome-text hover:bg-chrome-hover`}
                 title="重发（覆盖回复）"
               >
-                {loading ? '⏳ 重发中...' : '🔄 重发'}
+                {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                {loading ? '重发中...' : '重发'}
               </button>
             </>
           ) : (
             <button
               onClick={() => onRegenerate(node.id)}
               disabled={loading}
-              className={`${BTN_BASE} text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30`}
+              className={`${BTN_BASE} text-chrome-text-faint hover:text-chrome-text hover:bg-chrome-hover`}
               title="重新生成"
             >
-              {loading ? '⏳ 生成中...' : '🔄 重新生成'}
+              {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              {loading ? '生成中...' : '重新生成'}
             </button>
           )}
         </div>

@@ -5,8 +5,10 @@ import { openFileByPath, generateTabId, readDroppedMarkdownFiles } from '../../u
 import { saveSnippetAsMarkdown } from '../../utils/importText'
 import { getFileName } from '../../utils/markdown'
 import type { FileTreeNode, FileDirEntry } from '../../types'
+import { ChevronDown, ChevronRight, FolderOpen, Folder, FileText, Import } from 'lucide-react'
 import { ImportDialog } from './ImportDialog'
 import type { ImportSeed } from './ImportDialog'
+import { ToolbarButton } from '../shared/ToolbarButton'
 
 // 目录条目 → 树节点（面板内三处使用，抽为单一实现）
 function entriesToNodes(entries: FileDirEntry[]): FileTreeNode[] {
@@ -32,10 +34,13 @@ interface TreeNodeProps {
 // D8: memoized tree node — sibling subtrees skip re-rendering when another
 // directory loads children (node references are preserved by SET_CHILDREN).
 const TreeNode = memo(function TreeNode({ node, depth, isExpanded, onToggle, onOpen }: TreeNodeProps) {
+  const Icon = node.isDirectory
+    ? (isExpanded ? FolderOpen : Folder)
+    : FileText
   return (
     <div>
       <div
-        className="flex items-center gap-1 px-2 py-0.5 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 text-sm"
+        className="flex items-center gap-1 px-2.5 py-1 rounded-md cursor-pointer hover:bg-chrome-hover text-[13px] text-chrome-text"
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         draggable={node.isFile}
         onDragStart={(e) => {
@@ -55,22 +60,17 @@ const TreeNode = memo(function TreeNode({ node, depth, isExpanded, onToggle, onO
       >
         {/* Expand/collapse arrow for directories */}
         {node.isDirectory && (
-          <span className="w-4 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-            {isExpanded ? '▼' : '▶'}
+          <span className="w-4 text-chrome-text-faint flex-shrink-0 flex items-center justify-center">
+            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </span>
         )}
         {node.isFile && <span className="w-4 flex-shrink-0" />}
 
         {/* Icon */}
-        <span className="text-sm flex-shrink-0">
-          {node.isDirectory
-            ? isExpanded ? '📂' : '📁'
-            : '📄'
-          }
-        </span>
+        <Icon size={14} className="text-chrome-text-faint shrink-0" />
 
         {/* Name */}
-        <span className="truncate text-gray-700 dark:text-gray-300">
+        <span className="truncate">
           {node.name}
         </span>
       </div>
@@ -260,42 +260,38 @@ export function FileTreePanel() {
       onDrop={handlePanelDrop}
     >
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-2 py-2 border-b border-gray-300 dark:border-gray-700">
-        <button
-          onClick={handleOpenFolder}
-          className="flex-1 px-3 py-1.5 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors"
+      <div className="flex items-center gap-1 px-2 py-2 border-b border-chrome-border">
+        <ToolbarButton
+          icon={FolderOpen}
+          label="Open Folder"
           title="Open Folder"
-        >
-          📂 Open Folder
-        </button>
-        <button
-          onClick={handleOpenFileDialog}
-          className="px-3 py-1.5 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors"
+          onClick={handleOpenFolder}
+          className="flex-1 justify-center"
+        />
+        <ToolbarButton
+          icon={FileText}
           title="Open File"
-        >
-          📄
-        </button>
-        <button
-          onClick={() => setShowImport(true)}
-          className="px-3 py-1.5 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors"
+          onClick={handleOpenFileDialog}
+        />
+        <ToolbarButton
+          icon={Import}
           title="导入"
-        >
-          📥
-        </button>
+          onClick={() => setShowImport(true)}
+        />
       </div>
 
       {/* File Tree or Empty State */}
       <div className="flex-1 overflow-y-auto py-1">
         {layoutState.sidebarLoading && (
-          <div className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">Loading...</div>
+          <div className="px-4 py-2 text-xs text-chrome-text-muted">Loading...</div>
         )}
         {!layoutState.fileTree && !layoutState.sidebarLoading && (
-          <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
+          <div className="px-4 py-8 text-center text-xs text-chrome-text-faint">
             Open a folder to browse markdown files
           </div>
         )}
         {layoutState.fileTree && layoutState.fileTree.length === 0 && !layoutState.sidebarLoading && (
-          <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-gray-500">
+          <div className="px-4 py-8 text-center text-xs text-chrome-text-faint">
             No markdown files found in this folder
           </div>
         )}
@@ -317,7 +313,7 @@ export function FileTreePanel() {
 
       {/* Root path */}
       {layoutState.fileTreeRoot && (
-        <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500 border-t border-sidebar-border truncate">
+        <div className="px-3 py-2 text-xs text-chrome-text-faint border-t border-chrome-border truncate">
           {layoutState.fileTreeRoot}
         </div>
       )}

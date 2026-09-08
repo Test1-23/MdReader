@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useUIContext } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
+import { Check } from 'lucide-react'
 
 export function SettingsPanel() {
   const { state, dispatch } = useUIContext()
@@ -57,9 +58,9 @@ export function SettingsPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+          <label className="block text-[13px] font-semibold text-chrome-text-muted mb-1">
             API Endpoint
           </label>
           <input
@@ -67,15 +68,15 @@ export function SettingsPanel() {
             value={endpoint}
             onChange={(e) => setEndpoint(e.target.value)}
             placeholder="https://api.openai.com/v1"
-            className="w-full px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full px-3 py-2 text-[13px] border border-chrome-border rounded-lg bg-chrome-surface text-chrome-text focus:outline-none focus:ring-2 focus:ring-blue-500/40"
           />
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+          <p className="text-[10px] text-chrome-text-faint mt-1">
             OpenAI-compatible API base URL (e.g. https://api.openai.com/v1)
           </p>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+          <label className="block text-[13px] font-semibold text-chrome-text-muted mb-1">
             API Key
           </label>
           <input
@@ -83,15 +84,15 @@ export function SettingsPanel() {
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={hasKey ? '•••••••• 已保存，留空保持不变' : 'sk-...'}
-            className="w-full px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full px-3 py-2 text-[13px] border border-chrome-border rounded-lg bg-chrome-surface text-chrome-text focus:outline-none focus:ring-2 focus:ring-blue-500/40"
           />
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+          <p className="text-[10px] text-chrome-text-faint mt-1">
             Encrypted via system keychain (Electron safeStorage). The key never leaves the main process.
           </p>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+          <label className="block text-[13px] font-semibold text-chrome-text-muted mb-1">
             Model
           </label>
           <input
@@ -99,21 +100,22 @@ export function SettingsPanel() {
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="gpt-4o"
-            className="w-full px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full px-3 py-2 text-[13px] border border-chrome-border rounded-lg bg-chrome-surface text-chrome-text focus:outline-none focus:ring-2 focus:ring-blue-500/40"
           />
         </div>
       </div>
 
-      <div className="px-3 py-2 border-t border-gray-300 dark:border-gray-700 flex gap-2">
+      <div className="px-3 py-2 border-t border-chrome-border flex gap-2">
         <button
           onClick={handleSave}
-          className="flex-1 px-3 py-1.5 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
         >
-          {saved ? 'Saved ✓' : 'Save'}
+          {saved && <Check size={14} />}
+          {saved ? 'Saved' : 'Save'}
         </button>
         <button
           onClick={handleClear}
-          className="px-3 py-1.5 text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition-colors"
+          className="px-3 py-1.5 text-xs border border-chrome-border bg-chrome-surface hover:bg-chrome-hover text-chrome-text rounded-lg transition-colors"
         >
           Clear
         </button>

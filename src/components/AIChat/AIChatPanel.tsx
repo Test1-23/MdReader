@@ -11,6 +11,9 @@ import type { ConvUpdater } from '../../hooks/useAiStream'
 import { useDebouncedPersist } from '../../hooks/useDebouncedPersist'
 import { persistConversation, loadValidatedConversation } from '../../utils/conversationPersistence'
 import { VIEW_BTN_INACTIVE } from '../shared/classes'
+import { MessageSquare, GitBranch, History, Plus, X } from 'lucide-react'
+import { PanelHeader } from '../shared/PanelHeader'
+import { IconButton } from '../shared/IconButton'
 import { ChatView } from './ChatView'
 import { ChatTreeView } from './ChatTreeView'
 import { ChatInput } from './ChatInput'
@@ -22,7 +25,7 @@ interface AIChatPanelProps {
   tabId: string // 本窗口在布局树中的 tab id（用于关闭）
 }
 
-const CONFIG_HINT = '⚠️ AI 未配置：请先点击 ⚙️ 图标，在设置中填写 API Endpoint、API Key 和 Model。'
+const CONFIG_HINT = 'AI 未配置：请在 Activity Bar 中打开 Settings，填写 API Endpoint、API Key 和 Model。'
 
 export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const { state: uiState } = useUIContext()
@@ -268,64 +271,52 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   }, [aiDispatch, refreshList, stream])
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
+    <div className="h-full flex flex-col bg-chrome-surface">
       {/* Header */}
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 flex-1">
-          💬 AI Chat
-        </h3>
+      <PanelHeader
+        icon={MessageSquare}
+        title="AI Chat"
+        actions={
+          <>
+            {/* 视图切换 */}
+            <button
+              onClick={() => setViewMode('chat')}
+              className={`
+                w-7 h-7 flex items-center justify-center rounded-md transition-colors
+                ${viewMode === 'chat' ? 'bg-blue-600 text-white' : VIEW_BTN_INACTIVE}
+              `}
+              title="Chat View"
+            >
+              <MessageSquare size={14} />
+            </button>
+            <button
+              onClick={() => setViewMode('tree')}
+              className={`
+                w-7 h-7 flex items-center justify-center rounded-md transition-colors
+                ${viewMode === 'tree' ? 'bg-blue-600 text-white' : VIEW_BTN_INACTIVE}
+              `}
+              title="Tree View"
+            >
+              <GitBranch size={14} />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`
+                w-7 h-7 flex items-center justify-center rounded-md transition-colors
+                ${viewMode === 'list' ? 'bg-blue-600 text-white' : VIEW_BTN_INACTIVE}
+              `}
+              title="Conversations"
+            >
+              <History size={14} />
+            </button>
 
-        {/* 视图切换 */}
-        <div className="flex gap-0.5">
-          <button
-            onClick={() => setViewMode('chat')}
-            className={`
-              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${viewMode === 'chat' ? 'bg-blue-500 text-white' : VIEW_BTN_INACTIVE}
-            `}
-            title="Chat View"
-          >
-            💬
-          </button>
-          <button
-            onClick={() => setViewMode('tree')}
-            className={`
-              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${viewMode === 'tree' ? 'bg-blue-500 text-white' : VIEW_BTN_INACTIVE}
-            `}
-            title="Tree View"
-          >
-            🌳
-          </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`
-              w-6 h-6 flex items-center justify-center rounded text-[10px] transition-colors
-              ${viewMode === 'list' ? 'bg-blue-500 text-white' : VIEW_BTN_INACTIVE}
-            `}
-            title="Conversations"
-          >
-            🗂
-          </button>
-        </div>
-
-        {/* 新建对话 */}
-        <button
-          onClick={handleNewChat}
-          className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400"
-          title="New Chat"
-        >
-          +
-        </button>
-        {/* 关闭窗口 */}
-        <button
-          onClick={handleClose}
-          className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400"
-          title="Close Window"
-        >
-          ×
-        </button>
-      </div>
+            {/* 新建对话 */}
+            <IconButton icon={Plus} title="New Chat" onClick={handleNewChat} />
+            {/* 关闭窗口 */}
+            <IconButton icon={X} title="Close Window" onClick={handleClose} />
+          </>
+        }
+      />
 
       {/* 视图内容 */}
       {viewMode === 'list' ? (
