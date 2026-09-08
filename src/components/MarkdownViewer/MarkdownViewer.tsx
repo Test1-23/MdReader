@@ -1,6 +1,9 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useUIContext, useLayoutDispatch, useUIDispatch } from '../../context/AppContext'
@@ -14,8 +17,10 @@ interface MarkdownViewerProps {
   content: string
 }
 
-// Stable identity across renders — an inline array would defeat memoization
-const REMARK_PLUGINS = [remarkGfm]
+// Stable identity across renders — an inline array would defeat memoization.
+// remark-math 解析 $...$ 行内 / $$...$$ 块级数学，rehype-katex 渲染为 KaTeX。
+const REMARK_PLUGINS = [remarkGfm, remarkMath]
+const REHYPE_PLUGINS = [rehypeKatex]
 
 // ---- Module-level renderers (stable identity, no closure re-creation) ----
 
@@ -248,6 +253,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({ content }: Markdown
     >
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
         components={COMPONENTS}
       >
         {content}

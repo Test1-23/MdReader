@@ -372,7 +372,7 @@ async function main(): Promise<void> {
     // drag-drop a markdown File onto the window — the real useDragDrop pipeline
     const dropped = await run<boolean>(`
       (() => {
-        const file = new File(['# Smoke Heading\\n\\nBody **bold** text.\\n'], 'smoke-drop.md', { type: 'text/markdown' })
+        const file = new File(['# Smoke Heading\\n\\nBody **bold** text.\\n\\nInline math $x^2$ and block:\\n\\n$$\\nE=mc^2\\n$$\\n'], 'smoke-drop.md', { type: 'text/markdown' })
         const dt = new DataTransfer()
         dt.items.add(file)
         const opts = { bubbles: true, cancelable: true, dataTransfer: dt }
@@ -388,6 +388,13 @@ async function main(): Promise<void> {
 
     const bold = await run<boolean>(`document.querySelector('.markdown-body strong')?.textContent === 'bold'`)
     check('GFM bold rendered', bold === true)
+
+    // ---- LaTeX: inline $...$ and block $$...$$ rendered by KaTeX ----
+    const inlineMath = await run<boolean>(`document.querySelector('.markdown-body .katex') !== null`)
+    check('inline math rendered with KaTeX', inlineMath === true)
+    const blockMath = await run<boolean>(`document.querySelector('.markdown-body .katex-display') !== null`)
+    const blockProbe = await run<string>(`(document.querySelector('.markdown-body')?.innerHTML ?? 'NODOM').slice(-1500)`)
+    check('block math rendered with KaTeX', blockMath === true, blockProbe)
 
     // ---- new interaction: selection shows an inline input box, does NOT auto-open AI ----
     // (selectNode runs in the RENDERER — kept as a string so the main process

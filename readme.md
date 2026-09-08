@@ -6,6 +6,13 @@
 
 ### Markdown Rendering
 - Full [GFM](https://github.github.com/gfm/) support — tables, task lists, strikethrough, autolinks
+- **LaTeX math** — inline `$...$` and block math rendered locally via KaTeX (dark-mode aware); block math uses `$$` on its own lines (standard remark-math format):
+
+  ```
+  $$
+  E=mc^2
+  $$
+  ```
 - Syntax highlighting for code blocks via Prism.js
 - Document outline with click-to-scroll heading navigation
 - Raw source view with line numbers
@@ -57,6 +64,7 @@
 | Build Tool | Vite 6 |
 | CSS | Tailwind CSS 3 |
 | Markdown | react-markdown + remark-gfm |
+| Math | remark-math + rehype-katex + KaTeX |
 | Syntax Highlight | react-syntax-highlighter + Prism.js |
 | Split Panes | Allotment |
 | AI API | OpenAI-compatible (`/v1/chat/completions`) |
