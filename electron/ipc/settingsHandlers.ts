@@ -38,6 +38,19 @@ export async function getApiKey(): Promise<string | null> {
   }
 }
 
+/**
+ * 出站请求所需的完整 AI 配置。endpoint/model 一律取自主进程存储 ——
+ * 渲染层传什么都不影响请求目标，否则被攻破的渲染层可以把真实 API key
+ * 以 Authorization 头发往任意 https 主机（S1 的保证会因此失效）。
+ */
+export async function getAiSettings(): Promise<{ apiKey: string; endpoint: string; model: string } | null> {
+  const data = await readStoredConfig()
+  if (!data?.endpoint) return null
+  const apiKey = await getApiKey()
+  if (!apiKey) return null
+  return { apiKey, endpoint: data.endpoint, model: data.model || '' }
+}
+
 export function registerSettingsHandlers(ipcMain: IpcMain) {
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SAVE, async (event, config: ApiConfig) => {
     assertTrustedSender(event)

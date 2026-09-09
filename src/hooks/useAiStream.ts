@@ -192,7 +192,15 @@ export function useAiStream({ setConv, getConfig, getDocContent, onStopped }: Us
         onStoppedRef.current?.(latestConvRef.current!)
       })
 
-      api.aiChatStream(requestId, messages, config)
+      // invoke 本身也可能失败（主进程校验/通道错误）—— 不接住会让 streaming
+      // 永远为 true（发送按钮卡在"停止"，只能关窗恢复）
+      api.aiChatStream(requestId, messages, config).catch((err: unknown) => {
+        if (requestIdRef.current !== requestId) return
+        const msg = err instanceof Error ? err.message : String(err)
+        setConvRef.current((prev) => (
+          prev.id === streamConvId ? appendAssistantContent(prev, userNodeId, `\n\nError: ${msg}`) : prev))
+        finish()
+      })
     })
 
     setStreaming(false)

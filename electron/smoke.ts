@@ -22,7 +22,7 @@ import { resolve } from 'path'
 import { writeFile, rm, readFile, mkdtemp } from 'fs/promises'
 import { tmpdir } from 'os'
 import http from 'http'
-import { registerFileHandlers } from './ipc/fileHandlers'
+import { registerFileHandlers, authorizePath } from './ipc/fileHandlers'
 import { registerSettingsHandlers } from './ipc/settingsHandlers'
 import { registerAiHandlers } from './ipc/aiHandlers'
 import { setMainWindowGetter } from './ipc/security'
@@ -182,7 +182,16 @@ async function main(): Promise<void> {
         () => 'resolved', (err) => String(err && err.message ? err.message : err))`)
     check('un-authorized read is rejected', unauthorized.includes('Failed to read file'), unauthorized)
 
-    await run(`window.electronAPI.authorizePath(${JSON.stringify(workDir)})`)
+    const unauthorizedDir = await run<string>(`
+      window.electronAPI.readDir(${JSON.stringify(workDir)}).then(
+        () => 'resolved', (err) => String(err && err.message ? err.message : err))`)
+    check('un-authorized readDir is rejected', unauthorizedDir.includes('not authorized'), unauthorizedDir)
+
+    const unauthorizedInfo = await run<unknown>(`window.electronAPI.getFileInfo(${JSON.stringify(utf8Path)})`)
+    check('un-authorized getFileInfo returns null (no existence oracle)', unauthorizedInfo === null, unauthorizedInfo)
+
+    // 授权只能由主进程发起（对话框/测试夹具）—— 渲染层没有对应 IPC
+    authorizePath(workDir)
 
     const content = await run<string>(`window.electronAPI.readFile(${JSON.stringify(utf8Path)}).then(r => r.content)`)
     check('authorized read returns content', content.includes('Hello Smoke'), content)
@@ -312,7 +321,14 @@ async function main(): Promise<void> {
   console.log('\nPhase 4 — SSE streaming')
   {
     const base = `http://127.0.0.1:${sse.port}`
-    await run(`window.electronAPI.saveApiConfig({ endpoint: ${JSON.stringify(base + '/ok/v1')}, apiKey: 'sk-smoke', model: 'smoke-model' })`)
+    // endpoint/model 由主进程从存储中读取（渲染层传什么都被忽略）——
+    // 因此每个场景前先把存储的 endpoint 指到对应路由
+    const setEndpoint = async (route: string): Promise<void> => {
+      await run(`window.electronAPI.saveApiConfig({ endpoint: ${JSON.stringify(`${base}/${route}/v1`)}, apiKey: 'sk-smoke', model: 'smoke-model' })`)
+    }
+    // 渲染层传的 endpoint/model 会被主进程忽略，这里传占位值以示区分
+    const IGNORED = `{ endpoint: 'https://ignored.invalid/v1', model: 'ignored' }`
+    await setEndpoint('ok')
 
     const streamResult = await run<string>(`
       new Promise((resolvePromise, rejectPromise) => {
@@ -323,32 +339,35 @@ async function main(): Promise<void> {
         off.push(window.electronAPI.onAiReasoning((d) => reasonings.push(d.delta)))
         off.push(window.electronAPI.onAiDone(() => { cleanup(); resolvePromise(JSON.stringify({ text: chunks.join(''), reasoning: reasonings.join('') })) }))
         off.push(window.electronAPI.onAiError((d) => { cleanup(); rejectPromise(new Error(d.message)) }))
-        window.electronAPI.aiChatStream('smoke-req-ok', [{ role: 'user', content: 'hi' }], { endpoint: ${JSON.stringify(base + '/ok/v1')}, model: 'smoke-model' })
+        window.electronAPI.aiChatStream('smoke-req-ok', [{ role: 'user', content: 'hi' }], ${IGNORED})
       })`).catch((e) => { throw e })
     const parsed = JSON.parse(streamResult) as { text: string; reasoning: string }
     check('streamed content assembled in order', parsed.text === 'Hello from smoke server', parsed.text)
     check('reasoning_content streamed separately', parsed.reasoning === 'think-1think-2', parsed.reasoning)
 
+    await setEndpoint('truncated')
     const truncated = await run<string>(`
       new Promise((resolvePromise) => {
         const off = []
         const cleanup = () => off.forEach((f) => f())
         off.push(window.electronAPI.onAiError((d) => { cleanup(); resolvePromise(d.message) }))
         off.push(window.electronAPI.onAiDone(() => { cleanup(); resolvePromise('DONE-SENT') }))
-        window.electronAPI.aiChatStream('smoke-req-trunc', [{ role: 'user', content: 'hi' }], { endpoint: ${JSON.stringify(base + '/truncated/v1')}, model: 'smoke-model' })
+        window.electronAPI.aiChatStream('smoke-req-trunc', [{ role: 'user', content: 'hi' }], ${IGNORED})
       })`)
     check('truncated stream reports an error (not done)', truncated.includes('truncated'), truncated)
 
+    await setEndpoint('error')
     const errorPayload = await run<string>(`
       new Promise((resolvePromise) => {
         const off = []
         const cleanup = () => off.forEach((f) => f())
         off.push(window.electronAPI.onAiError((d) => { cleanup(); resolvePromise(d.message) }))
         off.push(window.electronAPI.onAiDone(() => { cleanup(); resolvePromise('DONE-SENT') }))
-        window.electronAPI.aiChatStream('smoke-req-err', [{ role: 'user', content: 'hi' }], { endpoint: ${JSON.stringify(base + '/error/v1')}, model: 'smoke-model' })
+        window.electronAPI.aiChatStream('smoke-req-err', [{ role: 'user', content: 'hi' }], ${IGNORED})
       })`)
     check('mid-stream error payload surfaces the message', errorPayload.includes('rate limited'), errorPayload)
 
+    await setEndpoint('slow')
     const cancelled = await run<string>(`
       new Promise((resolvePromise) => {
         const off = []
@@ -359,19 +378,25 @@ async function main(): Promise<void> {
         off.push(window.electronAPI.onAiCancelled(() => { cleanup(); resolvePromise('CANCELLED-EVENT') }))
         off.push(window.electronAPI.onAiDone(() => { cleanup(); resolvePromise('DONE-SENT') }))
         off.push(window.electronAPI.onAiError(() => { cleanup(); resolvePromise('ERROR-SENT') }))
-        window.electronAPI.aiChatStream('smoke-req-cancel', [{ role: 'user', content: 'hi' }], { endpoint: ${JSON.stringify(base + '/slow/v1')}, model: 'smoke-model' })
+        window.electronAPI.aiChatStream('smoke-req-cancel', [{ role: 'user', content: 'hi' }], ${IGNORED})
       })`)
     check('cancel resolves with a cancelled event (stop deadlock fixed)', cancelled === 'CANCELLED-EVENT', cancelled)
 
+    // 渲染层传的 endpoint 被忽略 —— 用存储里的非法 endpoint 触发校验
+    await run(`window.electronAPI.saveApiConfig({ endpoint: 'http://insecure.example.com/v1', apiKey: 'sk-smoke', model: 'smoke-model' })`)
     const insecure = await run<string>(`
-      window.electronAPI.aiChat([{ role: 'user', content: 'hi' }], { endpoint: 'http://insecure.example.com/v1', model: 'm' }).then(
+      window.electronAPI.aiChat([{ role: 'user', content: 'hi' }], ${IGNORED}).then(
         () => 'resolved', (err) => String(err && err.message ? err.message : err))`)
     check('http endpoint rejected (https enforced)', insecure.includes('https'), insecure)
 
+    await run(`window.electronAPI.saveApiConfig({ endpoint: 'not-a-url', apiKey: 'sk-smoke', model: 'smoke-model' })`)
     const invalidUrl = await run<string>(`
-      window.electronAPI.aiChat([{ role: 'user', content: 'hi' }], { endpoint: 'not-a-url', model: 'm' }).then(
+      window.electronAPI.aiChat([{ role: 'user', content: 'hi' }], ${IGNORED}).then(
         () => 'resolved', (err) => String(err && err.message ? err.message : err))`)
     check('invalid endpoint URL rejected', invalidUrl.includes('Invalid API endpoint'), invalidUrl)
+
+    // Phase 5 的 UI 发送需要可用端点
+    await setEndpoint('ok')
   }
 
   // ══════════════ Phase 5: renderer UI — boot, drag-drop, settings panel ══════════════
@@ -387,7 +412,7 @@ async function main(): Promise<void> {
     // drag-drop a markdown File onto the window — the real useDragDrop pipeline
     const dropped = await run<boolean>(`
       (() => {
-        const file = new File(['# Smoke Heading\\n\\nBody **bold** text.\\n\\nInline math $x^2$ and block:\\n\\n$$\\nE=mc^2\\n$$\\n\\n## HTML <span class="html-test" style="color: red">hi</span>\\n\\n<div class="html-block">raw <b>bold</b></div>\\n\\nEscape\\\\nbreak here\\n\\nRaw br: A<br>B\\n\\n~~~text\\ncode \\\\n stays\\n~~~\\n'], 'smoke-drop.md', { type: 'text/markdown' })
+        const file = new File(['# Smoke Heading\\n\\nBody **bold** text.\\n\\nInline math $x^2$ and block:\\n\\n$$\\nE=mc^2\\n$$\\n\\n## HTML <span class="html-test" style="color: red">hi</span>\\n\\n<div class="html-block">raw <b>bold</b></div>\\n\\nEscape\\\\nbreak here\\n\\nRaw br: A<br>B\\n\\n<script>window.__pwned=1<\\/script>\\n\\n<style>body{display:none}<\\/style>\\n\\n<img src="x" onerror="window.__pwned=1" alt="probe">\\n\\n~~~text\\ncode \\\\n stays\\n~~~\\n'], 'smoke-drop.md', { type: 'text/markdown' })
         const dt = new DataTransfer()
         dt.items.add(file)
         const opts = { bubbles: true, cancelable: true, dataTransfer: dt }
@@ -422,6 +447,19 @@ async function main(): Promise<void> {
     check('block HTML rendered as elements', htmlBlock === true)
     const htmlHeadingId = await run<boolean>(`document.querySelector('h2#html-hi') !== null`)
     check('heading with inline HTML gets the tag-stripped anchor id', htmlHeadingId === true)
+
+    // ---- HTML sanitizer: executable / globally-scoped markup must be stripped ----
+    const pwned = await run<boolean>(`window.__pwned === undefined`)
+    check('script inside markdown did not execute', pwned === true)
+    const scriptGone = await run<boolean>(`document.querySelector('.markdown-body script') === null`)
+    check('<script> stripped from the DOM', scriptGone === true)
+    const styleGone = await run<boolean>(`document.querySelector('.markdown-body style') === null`)
+    check('<style> stripped (no global CSS injection)', styleGone === true)
+    const bodyVisible = await run<boolean>(`getComputedStyle(document.body).display !== 'none'`)
+    check('page styling unaffected by markdown <style>', bodyVisible === true)
+    const onerrorGone = await run<boolean>(
+      `document.querySelector('.markdown-body img[alt="probe"]')?.getAttribute('onerror') == null`)
+    check('inline event handler attribute stripped', onerrorGone === true)
 
     // ---- literal two-char \n escape → <br>, except inside code ----
     // String.fromCharCode(92) avoids backslash-escaping ambiguity across layers

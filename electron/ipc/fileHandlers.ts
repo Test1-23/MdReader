@@ -31,9 +31,10 @@ function decodeBuffer(buf: Buffer): string {
   }
 }
 
-// S6: only paths the user explicitly opened (folder dialog / file dialog /
-// drag-drop) may be read. Dialog handlers auto-authorize; the renderer calls
-// file:authorizePath for drag-dropped files.
+// S6: only paths the user explicitly opened may be read/written. Roots are
+// registered in-main-process by the dialog handlers only — there is deliberately
+// NO IPC channel that lets the renderer authorize an arbitrary path (that would
+// reduce the whole authorization model to "trust the renderer").
 const authorizedRoots = new Set<string>()
 
 function normalizePath(p: string): string {
@@ -41,12 +42,15 @@ function normalizePath(p: string): string {
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved
 }
 
-async function exists(p: string): Promise<boolean> {
+/** 以 O_EXCL 原子创建空文件；已存在则返回 false（不覆盖） */
+async function claimFile(p: string): Promise<boolean> {
   try {
-    await stat(p)
+    const handle = await open(p, 'wx')
+    await handle.close()
     return true
-  } catch {
-    return false
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return false
+    throw err
   }
 }
 
@@ -98,13 +102,6 @@ export function registerFileHandlers(ipcMain: IpcMain) {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.FILE_AUTHORIZE_PATH, (event, p: unknown) => {
-    assertTrustedSender(event)
-    if (typeof p === 'string' && p.length > 0) {
-      authorizePath(p)
-    }
-  })
-
   // 写入 .md 文件（导入文本片段落盘）
   ipcMain.handle(IPC_CHANNELS.FILE_WRITE, async (event, args: WriteFileArgs): Promise<WriteFileResult> => {
     assertTrustedSender(event)
@@ -130,20 +127,23 @@ export function registerFileHandlers(ipcMain: IpcMain) {
         effectivePath = `${effectivePath}.md`
       }
       // 非覆盖模式：重名时唯一化 name(1).md、name(2).md…
-      // （单用户桌面应用，唯一化检查存在微小的 TOCTOU 竞态窗口，可接受）
+      // 用 O_EXCL 原子占位（而不是先 stat 再写），避免检查与写入之间
+      // 新出现的文件被静默覆盖
       if (!args.overwrite) {
-        let candidate = effectivePath
-        let counter = 1
-        while (await exists(candidate)) {
+        let counter = 0
+        for (;;) {
           const parsed = parse(effectivePath)
-          candidate = format({
-            dir: parsed.dir,
-            name: `${parsed.name}(${counter})`,
-            ext: parsed.ext,
-          })
+          const candidate = counter === 0
+            ? effectivePath
+            : format({ dir: parsed.dir, name: `${parsed.name}(${counter})`, ext: parsed.ext })
+          const claimed = await claimFile(candidate)
+          if (claimed) {
+            effectivePath = candidate
+            break
+          }
           counter++
+          if (counter > 9999) throw new Error('Cannot find a free file name')
         }
-        effectivePath = candidate
       }
       await writeFileAtomic(effectivePath, args.content)
       return { filePath: effectivePath }
@@ -155,6 +155,10 @@ export function registerFileHandlers(ipcMain: IpcMain) {
 
   ipcMain.handle(IPC_CHANNELS.FILE_READ_DIR, async (event, dirPath: string) => {
     assertTrustedSender(event)
+    // S6：目录列举同样受授权约束，否则渲染层可枚举整个磁盘
+    if (!isAuthorized(dirPath)) {
+      throw new Error('Directory not authorized — open it via the folder dialog')
+    }
     try {
       const entries = await readdir(dirPath, { withFileTypes: true })
       const result: FileDirEntry[] = entries
@@ -193,6 +197,8 @@ export function registerFileHandlers(ipcMain: IpcMain) {
 
   ipcMain.handle(IPC_CHANNELS.FILE_GET_INFO, async (event, filePath: string) => {
     assertTrustedSender(event)
+    // S6：否则会变成任意路径的存在性/大小探测接口
+    if (!isAuthorized(filePath)) return null
     try {
       const stats = await stat(filePath)
       return {

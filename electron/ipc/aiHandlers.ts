@@ -4,7 +4,7 @@ import { join, isAbsolute, relative } from 'path'
 import type { ChatMessage, ChatRequestConfig, ConversationSummary } from '../../src/types/ipc'
 import { IPC_CHANNELS } from './channels'
 import { convDir, ensureDir } from './paths'
-import { getApiKey } from './settingsHandlers'
+import { getAiSettings } from './settingsHandlers'
 import { assertTrustedSender } from './security'
 import { writeFileAtomic } from './fsUtils'
 
@@ -46,13 +46,14 @@ function buildChatUrl(endpoint: string): string {
   return `${endpoint.replace(/\/+$/, '')}/chat/completions`
 }
 
-async function requireApiKey(): Promise<string> {
-  // S1: the key never enters the renderer — read it from disk here.
-  const apiKey = await getApiKey()
-  if (!apiKey) {
-    throw new Error('API key not configured — open Settings in the Activity Bar and save your API key')
+async function requireAiSettings(): Promise<{ apiKey: string; endpoint: string; model: string }> {
+  // S1: endpoint/model/key all come from the main-process store — a compromised
+  // renderer must not be able to redirect a request carrying the real API key
+  const settings = await getAiSettings()
+  if (!settings) {
+    throw new Error('AI not configured — open Settings in the Activity Bar and save endpoint, key and model')
   }
-  return apiKey
+  return settings
 }
 
 // Server-side stream protocol error (e.g. {"error": ...} payload or truncation)
@@ -61,21 +62,22 @@ class StreamProtocolError extends Error {}
 // ---- Handlers ----
 
 export function registerAiHandlers(ipcMain: IpcMain) {
-  ipcMain.handle(IPC_CHANNELS.AI_CHAT, async (event, messages: ChatMessage[], config: ChatRequestConfig) => {
+  // config 仅用于 reading `thinking` —— endpoint/model 一律取主进程存储
+  ipcMain.handle(IPC_CHANNELS.AI_CHAT, async (event, messages: ChatMessage[], _config: ChatRequestConfig) => {
     assertTrustedSender(event)
     const controller = new AbortController()
     // B19j: a hanging endpoint must not leave the invoke promise pending forever
     const timeout = setTimeout(() => controller.abort(), 120_000)
     try {
-      const apiKey = await requireApiKey()
-      const response = await fetch(buildChatUrl(config.endpoint), {
+      const settings = await requireAiSettings()
+      const response = await fetch(buildChatUrl(settings.endpoint), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${settings.apiKey}`,
         },
         body: JSON.stringify({
-          model: config.model,
+          model: settings.model,
           messages,
           stream: false,
         }),
@@ -111,19 +113,19 @@ export function registerAiHandlers(ipcMain: IpcMain) {
     }
 
     try {
-      const apiKey = await requireApiKey()
-      const response = await fetch(buildChatUrl(config.endpoint), {
+      const settings = await requireAiSettings()
+      const response = await fetch(buildChatUrl(settings.endpoint), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${settings.apiKey}`,
         },
         body: JSON.stringify({
-          model: config.model,
+          model: settings.model,
           messages,
           stream: true,
           // DeepSeek-style thinking toggle — only attached when explicitly enabled.
-          ...(config.thinking ? { chat_template_kwargs: { thinking: true } } : {}),
+          ...(config?.thinking ? { chat_template_kwargs: { thinking: true } } : {}),
         }),
         signal: controller.signal,
       })
@@ -215,6 +217,13 @@ export function registerAiHandlers(ipcMain: IpcMain) {
   ipcMain.handle(IPC_CHANNELS.AI_SAVE_CONVERSATION, async (event, id: unknown, data: unknown) => {
     assertTrustedSender(event)
     const safeId = sanitizeConversationId(id)
+    if (!isPlausibleConversation(data)) {
+      throw new Error('Invalid conversation payload')
+    }
+    const serialized = JSON.stringify(data)
+    if (serialized.length > MAX_CONVERSATION_BYTES) {
+      throw new Error(`Conversation too large (${(serialized.length / 1024 / 1024).toFixed(1)}MB, limit 5MB)`)
+    }
     await enqueueWrite(safeId, data)
   })
 
@@ -288,6 +297,18 @@ export function registerAiHandlers(ipcMain: IpcMain) {
 
 const CONV_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
 const INDEX_FILENAME = 'index.json'
+const MAX_CONVERSATION_BYTES = 5 * 1024 * 1024
+
+// 会话写入的形状下限校验：拒绝明显不是会话的负载（也限制磁盘占用）
+function isPlausibleConversation(data: unknown): boolean {
+  if (!data || typeof data !== 'object') return false
+  const d = data as Record<string, unknown>
+  if (typeof d.id !== 'string' || typeof d.title !== 'string') return false
+  if (!d.nodes || typeof d.nodes !== 'object' || Array.isArray(d.nodes)) return false
+  if (d.rootId !== null && typeof d.rootId !== 'string') return false
+  if (d.activeNodeId !== null && typeof d.activeNodeId !== 'string') return false
+  return true
+}
 
 // B12: conversation ids come from the renderer and are used as file names —
 // validate the shape and resolve-path containment before touching the filesystem.

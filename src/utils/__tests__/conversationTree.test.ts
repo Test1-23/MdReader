@@ -212,6 +212,44 @@ describe('normalizeConversation', () => {
     expect('selectedText' in migrated).toBe(false)
   })
 
+  it('R6: corrupt data never throws and yields an empty, valid tree', () => {
+    const corrupt = { id: 'c', title: 't', nodes: null, rootId: 'r', activeNodeId: 'r' } as never
+    expect(() => normalizeConversation(corrupt)).not.toThrow()
+    const result = normalizeConversation(corrupt)
+    expect(result.nodes).toEqual({})
+    expect(result.rootId).toBeNull()
+    expect(result.activeNodeId).toBeNull()
+    expect(result.id).toBe('c')
+  })
+
+  it('R6: drops malformed nodes and repairs missing fields', () => {
+    const conv = {
+      id: 'c', title: 't', createdAt: 1, updatedAt: 2,
+      rootId: 'good',
+      activeNodeId: 'missing',
+      nodes: {
+        good: { id: 'good', role: 'user', content: 'hi', timestamp: 1, parentId: null, childrenIds: ['bad', 'missing'] },
+        bad: { id: 'bad', role: 'narrator', content: 'x' },       // 非法 role
+        noContent: { id: 'noContent', role: 'assistant' },         // 缺 content
+        notAnObject: 'oops',
+      },
+    } as never
+    const result = normalizeConversation(conv)
+    expect(Object.keys(result.nodes)).toEqual(['good'])
+    expect(result.nodes.good.childrenIds).toEqual([])          // 悬空/非法子节点被剪除
+    expect(result.activeNodeId).toBe('good')                    // 失效的 activeNodeId 回退 root
+    expect(result.title).toBe('t')
+  })
+
+  it('R6: defaults missing childrenIds instead of throwing', () => {
+    const conv = {
+      id: 'c', rootId: 'a', activeNodeId: 'a',
+      nodes: { a: { id: 'a', role: 'user', content: 'hi', timestamp: 1, parentId: null } },
+    } as never
+    const result = normalizeConversation(conv)
+    expect(result.nodes.a.childrenIds).toEqual([])
+  })
+
   it('R6: leaves existing selectedTexts untouched', () => {
     let conv = setup()
     const assistantId = conv.activeNodeId!

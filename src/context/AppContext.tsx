@@ -10,6 +10,7 @@ import {
   collectAllTabs,
 } from '../utils/layout'
 import { persistConversation } from '../utils/conversationPersistence'
+import { reportError, setErrorReporter } from '../utils/errorReporting'
 import { execute } from '../services/layoutService'
 import type { LayoutResult } from '../services/layoutService'
 import { createConversation, normalizeConversation } from '../utils/conversationTree'
@@ -332,6 +333,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [layoutState, layoutDispatch] = useReducer(layoutReducer, initialLayout)
   const [uiState, uiDispatch] = useReducer(uiReducer, initialUI)
 
+  // 全局错误上报：React 之外的失败（异步、事件、rAF）也能到达错误横幅
+  React.useEffect(() => {
+    setErrorReporter((message) => uiDispatch({ type: 'SET_ERROR', payload: message }))
+    const onError = (e: ErrorEvent) => reportError(`未捕获错误：${e.message}`, e.error)
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const reason = e.reason
+      reportError(`未处理的异步错误：${reason instanceof Error ? reason.message : String(reason)}`, reason)
+    }
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => {
+      setErrorReporter(null)
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
+    }
+  }, [])
+
   // Preload API config on startup so AI Chat works without opening Settings first
   React.useEffect(() => {
     if (window.electronAPI?.loadApiConfig) {
@@ -345,20 +363,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // 启动时恢复会话列表 + 最后对话（多窗口语义：首个 AI 窗口原子领取）
   React.useEffect(() => {
-    if (window.electronAPI?.listConversations) {
-      window.electronAPI.listConversations().then((list) => {
-        uiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
-        if (list.length > 0) {
-          const last = list[0]
-          window.electronAPI!.loadConversation(last.id).then((data) => {
-            if (data && typeof data === 'object' && 'nodes' in data && 'rootId' in data && 'id' in data) {
-              // R6: 启动恢复同样走规范化，损坏数据不会破坏聊天 UI
-              uiDispatch({ type: 'SET_STARTUP_CONVERSATION', payload: { conversation: normalizeConversation(data as Conversation) } })
-            }
-          }).catch(() => {})
+    const api = window.electronAPI
+    if (!api?.listConversations) return
+    api.listConversations().then((list) => {
+      uiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
+      if (list.length === 0) return
+      const last = list[0]
+      // preload 面可能不完整 —— 与 listConversations 用同样的守卫
+      if (!api.loadConversation) return
+      api.loadConversation(last.id).then((data) => {
+        if (data && typeof data === 'object' && 'nodes' in data && 'rootId' in data && 'id' in data) {
+          // R6: 启动恢复同样走规范化，损坏数据不会破坏聊天 UI
+          uiDispatch({ type: 'SET_STARTUP_CONVERSATION', payload: { conversation: normalizeConversation(data as Conversation) } })
         }
-      }).catch(() => {})
-    }
+      }).catch((err: unknown) => reportError('恢复上次对话失败', err))
+    }).catch((err: unknown) => reportError('读取对话列表失败', err))
   }, [])
 
   // AI 窗口 GC：布局树中已不存在的 AI tab 对应的对话 → 先持久化再移除。
@@ -371,8 +390,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     )
     for (const [tabId, conv] of Object.entries(uiState.aiConversations)) {
       if (!aiTabIds.has(tabId)) {
-        persistConversation(conv)
-        uiDispatch({ type: 'REMOVE_AI_CONVERSATION', payload: { tabId } })
+        // 保存失败时不移除内存副本（persistConversation 已上报错误）——
+        // 否则对话会随窗口一起彻底丢失
+        void persistConversation(conv).then((saved) => {
+          if (saved) uiDispatch({ type: 'REMOVE_AI_CONVERSATION', payload: { tabId } })
+        })
       }
     }
   }, [layoutState.layoutRoot, uiState.aiConversations])

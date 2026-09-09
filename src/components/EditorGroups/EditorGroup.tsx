@@ -7,6 +7,7 @@ import { X } from 'lucide-react'
 import { GroupTabs } from './GroupTabs'
 import { GroupContent } from './GroupContent'
 import { IconButton } from '../shared/IconButton'
+import { ErrorBoundary } from '../ErrorBoundary'
 
 type DropZone = SplitPosition | 'center' | null
 
@@ -223,7 +224,10 @@ export const EditorGroup = memo(function EditorGroup({ group }: EditorGroupProps
       {/* Content */}
       <div className="flex-1 overflow-hidden bg-chrome-surface">
         {activeTab ? (
-          <GroupContent tab={activeTab} />
+          // 单个面板出错不应带走整个应用 —— 其余面板保持可用
+          <ErrorBoundary key={activeTab.id}>
+            <GroupContent tab={activeTab} />
+          </ErrorBoundary>
         ) : (
           <div className="h-full flex items-center justify-center text-chrome-text-faint text-sm">
             <div className="text-center">

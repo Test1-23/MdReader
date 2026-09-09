@@ -11,7 +11,6 @@ export interface ElectronAPI {
   writeFile: (args: WriteFileArgs) => Promise<WriteFileResult>
   readDir: (dirPath: string) => Promise<FileDirEntry[]>
   getFileInfo: (filePath: string) => Promise<{ size: number; lastModified: number } | null>
-  authorizePath: (path: string) => Promise<void>
 
   // Dialog operations
   openFileDialog: () => Promise<string | null>
@@ -49,7 +48,6 @@ const electronAPI: ElectronAPI = {
   writeFile: (args) => ipcRenderer.invoke(IPC_CHANNELS.FILE_WRITE, args),
   readDir: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.FILE_READ_DIR, dirPath),
   getFileInfo: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.FILE_GET_INFO, filePath),
-  authorizePath: (path) => ipcRenderer.invoke(IPC_CHANNELS.FILE_AUTHORIZE_PATH, path),
 
   openFileDialog: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FILE),
   openFolderDialog: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FOLDER),

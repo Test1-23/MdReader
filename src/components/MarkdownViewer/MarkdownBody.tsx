@@ -6,6 +6,7 @@ import rehypeRaw from 'rehype-raw'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import remarkBreakEscapes from './remarkBreakEscapes'
+import rehypeSafeHtml from './rehypeSafeHtml'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useDarkMode } from '../../context/AppContext'
@@ -21,7 +22,9 @@ import { bumpParseCount } from '../../utils/parseProbe'
 // remarkBreakEscapes 把字面 `\n` 转为换行；rehype-raw 支持内联 HTML。
 // 顺序不可换：rehype-raw 会用 parse5 重解析整棵树，必须在 rehype-katex 之前。
 const REMARK_PLUGINS = [remarkGfm, remarkMath, remarkBreakEscapes]
-const REHYPE_PLUGINS = [rehypeRaw, rehypeKatex]
+// rehypeRaw 解析原始 HTML → rehypeSafeHtml 剥掉可执行/全局副作用元素 →
+// rehypeKatex 渲染数学（raw 必须最先，katex 必须最后）
+const REHYPE_PLUGINS = [rehypeRaw, rehypeSafeHtml, rehypeKatex]
 
 // ---- Module-level renderers (stable identity, no closure re-creation) ----
 

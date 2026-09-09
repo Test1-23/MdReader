@@ -51,11 +51,11 @@ export async function readDroppedFile(
   let size: number
   let lastModified: number
 
-  if (isElectron && (file as File & { path?: string }).path) {
-    filePath = (file as File & { path?: string }).path!
-    // S6: register drag-dropped files as explicitly user-opened before reading
-    // (F7: await 保证授权在读取之前落定)
-    await window.electronAPI?.authorizePath?.(filePath)
+  const electronPath = (file as File & { path?: string }).path
+  if (isElectron && electronPath) {
+    // 注意：Electron 32+ 已移除 File.path（需 webUtils.getPathForFile），
+    // 因此正常路径下走的是下面的 FileReader 分支
+    filePath = electronPath
     const result = await readFile(filePath)
     content = result.content
     size = result.size

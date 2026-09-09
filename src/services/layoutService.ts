@@ -22,6 +22,7 @@ import {
 } from '../utils/layout'
 import { createId } from '../utils/fileReader'
 import { AI_WINDOW_ID } from '../utils/windowDescriptor'
+import { reportError } from '../utils/errorReporting'
 
 // ---- Operation Types ----
 
@@ -53,16 +54,6 @@ function noChange(state: LayoutState): LayoutResult {
     activeTabId: state.activeTabId,
     openFilesToAdd: {},
     openFilesToRemove: [],
-  }
-}
-
-function rebuild(state: LayoutState): LayoutResult {
-  return {
-    layoutRoot: null,
-    activeGroupId: null,
-    activeTabId: null,
-    openFilesToRemove: Object.keys(state.openFiles),
-    openFilesToAdd: {},
   }
 }
 
@@ -148,8 +139,10 @@ export function execute(
   try {
     result = apply(state, operation)
   } catch (err) {
-    console.error('[layoutService] Unexpected error during apply:', err, operation)
-    return rebuild(state)
+    // 保持原状态并上报 —— 早期版本这里会 rebuild（清空整个工作区），
+    // 一个未预料的异常就足以让用户丢失全部打开的文档
+    reportError(`布局操作失败：${err instanceof Error ? err.message : String(err)}`, { err, operation })
+    return noChange(state)
   }
 
   // R3/B19d: the second validation pass checks the full invariant set, not just

@@ -295,44 +295,82 @@ export function buildMessages(
 
 // ---- Validation / Repair (R6) ----
 
-// Repair a conversation loaded from disk: drop unreachable orphan nodes, prune
-// dangling childrenIds, and restore a valid rootId / activeNodeId.
+/** 磁盘数据不可信 —— 宽松校验节点形状，坏数据被修复/丢弃而不是抛异常 */
+function sanitizeNode(value: unknown): ChatNode | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  if (typeof raw.id !== 'string' || raw.id.length === 0) return null
+  if (raw.role !== 'user' && raw.role !== 'assistant' && raw.role !== 'system') return null
+  if (typeof raw.content !== 'string') return null
+  const childrenIds = Array.isArray(raw.childrenIds)
+    ? raw.childrenIds.filter((c): c is string => typeof c === 'string')
+    : []
+  const legacySelectedText = typeof raw.selectedText === 'string' ? raw.selectedText : undefined
+  const selectedTexts = Array.isArray(raw.selectedTexts)
+    ? raw.selectedTexts.filter((t): t is string => typeof t === 'string')
+    : legacySelectedText !== undefined ? [legacySelectedText] : undefined
+  return {
+    id: raw.id,
+    role: raw.role,
+    content: raw.content,
+    reasoning: typeof raw.reasoning === 'string' ? raw.reasoning : undefined,
+    reasoningDuration: typeof raw.reasoningDuration === 'number' ? raw.reasoningDuration : undefined,
+    selectedTexts,
+    timestamp: typeof raw.timestamp === 'number' ? raw.timestamp : Date.now(),
+    parentId: typeof raw.parentId === 'string' ? raw.parentId : null,
+    childrenIds,
+  }
+}
+
+// Repair a conversation loaded from disk: validate every node shape, drop
+// unreachable/orphan nodes, prune dangling childrenIds, restore a valid
+// rootId / activeNodeId. Never throws — corrupt data yields an empty tree.
 export function normalizeConversation(conv: Conversation): Conversation {
+  const rawNodes = (conv && typeof conv === 'object' && conv.nodes && typeof conv.nodes === 'object')
+    ? conv.nodes as unknown as Record<string, unknown>
+    : {}
+
+  const nodes: Record<string, ChatNode> = {}
+  for (const [key, value] of Object.entries(rawNodes)) {
+    const node = sanitizeNode(value)
+    if (node) nodes[key] = node
+  }
+
+  // 只保留从 rootId 可达的节点（孤儿/环一律剔除）
   const reachable = new Set<string>()
-  const stack: string[] = conv.rootId && conv.nodes[conv.rootId] ? [conv.rootId] : []
+  const stack: string[] = typeof conv.rootId === 'string' && nodes[conv.rootId] ? [conv.rootId] : []
   while (stack.length) {
     const id = stack.pop()!
     if (reachable.has(id)) continue
     reachable.add(id)
-    const node = conv.nodes[id]
+    const node = nodes[id]
     if (!node) continue
     for (const childId of node.childrenIds) {
-      if (conv.nodes[childId]) stack.push(childId)
+      if (nodes[childId]) stack.push(childId)
     }
   }
 
-  const nodes: Record<string, ChatNode> = {}
-  for (const id of reachable) nodes[id] = conv.nodes[id]
-
-  // Migrate legacy single-quote field (selectedText: string) to selectedTexts
+  const kept: Record<string, ChatNode> = {}
   for (const id of reachable) {
-    const legacy = conv.nodes[id] as ChatNode & { selectedText?: string }
-    if (legacy.selectedText !== undefined && !legacy.selectedTexts) {
-      const { selectedText: _legacy, ...rest } = legacy
-      nodes[id] = { ...rest, selectedTexts: [legacy.selectedText] }
-    }
+    const node = nodes[id]
+    const filtered = node.childrenIds.filter((cid) => reachable.has(cid))
+    kept[id] = filtered.length === node.childrenIds.length ? node : { ...node, childrenIds: filtered }
   }
 
-  // Prune childrenIds pointing at missing nodes
-  for (const node of Object.values(nodes)) {
-    const filtered = node.childrenIds.filter((cid) => nodes[cid])
-    if (filtered.length !== node.childrenIds.length) {
-      nodes[node.id] = { ...node, childrenIds: filtered }
-    }
+  const rootId = typeof conv.rootId === 'string' && kept[conv.rootId]
+    ? conv.rootId
+    : (Object.keys(kept)[0] ?? null)
+  const activeNodeId = typeof conv.activeNodeId === 'string' && kept[conv.activeNodeId]
+    ? conv.activeNodeId
+    : rootId
+
+  return {
+    id: typeof conv.id === 'string' ? conv.id : `conv-${Date.now()}`,
+    title: typeof conv.title === 'string' ? conv.title : 'New Chat',
+    createdAt: typeof conv.createdAt === 'number' ? conv.createdAt : Date.now(),
+    updatedAt: typeof conv.updatedAt === 'number' ? conv.updatedAt : Date.now(),
+    nodes: kept,
+    rootId,
+    activeNodeId,
   }
-
-  const rootId = conv.rootId && nodes[conv.rootId] ? conv.rootId : (Object.keys(nodes)[0] ?? null)
-  const activeNodeId = conv.activeNodeId && nodes[conv.activeNodeId] ? conv.activeNodeId : rootId
-
-  return { ...conv, nodes, rootId, activeNodeId }
 }

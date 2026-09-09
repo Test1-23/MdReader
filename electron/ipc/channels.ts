@@ -7,7 +7,6 @@ export const IPC_CHANNELS = {
   FILE_WRITE: 'file:write',
   FILE_READ_DIR: 'file:readDir',
   FILE_GET_INFO: 'file:getInfo',
-  FILE_AUTHORIZE_PATH: 'file:authorizePath',
 
   // Dialog operations
   DIALOG_OPEN_FILE: 'dialog:openFile',
