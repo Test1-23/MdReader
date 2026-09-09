@@ -260,6 +260,25 @@ describe('OPEN_AI_WINDOW focus preference', () => {
     expect(reopened.layoutRoot).not.toBe(state.layoutRoot) // activeTabIndex updated
   })
 
+  it('appending a pane to a horizontal root preserves the root id and children identity', () => {
+    // 先造一个横向分屏根（两个文件），再开 AI 窗 → 走 append 分支
+    let state = openFileOp(emptyState(), 'a')
+    state = openFileOp(state, 'b')
+    state = toState(state, execute(state, { type: 'SPLIT_GROUP', groupId: state.activeGroupId!, position: 'right' }))
+    const root = state.layoutRoot!
+    expect(root.type).toBe('split')
+    if (root.type !== 'split') return
+    const firstChild = root.children[0]
+
+    const opened = execute(state, { type: 'OPEN_AI_WINDOW' })
+    // 不换 id（否则 Allotment 重挂载 → 所有已打开文档重新解析）
+    expect(opened.layoutRoot!.id).toBe(root.id)
+    if (opened.layoutRoot!.type === 'split') {
+      expect(opened.layoutRoot!.children[0]).toBe(firstChild)
+      expect(opened.layoutRoot!.children.length).toBe(root.children.length + 1)
+    }
+  })
+
   it('falls back to the remaining AI window when lastAiTabId is stale', () => {
     let state = openFileOp(emptyState(), 'a')
     state = toState(state, execute(state, { type: 'OPEN_AI_WINDOW' }))

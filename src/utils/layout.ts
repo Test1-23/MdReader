@@ -195,29 +195,17 @@ export function splitWithTab(
   })
 }
 
-// ---- Promote Sibling (close group → lift sibling) ----
+// ---- Promote Sibling (close group → remove it, keep the split) ----
 
-function replaceNode(root: LayoutNode, targetId: string, replacement: LayoutNode): LayoutNode {
-  return mapTree(
-    root,
-    (group) => (group.id === targetId ? replacement : group),
-    (split, children, sizes) => (split.id === targetId ? replacement : { ...split, children, sizes })
-  )!
-}
-
+/**
+ * 关闭分组：只移除该节点，保留父 split（哪怕只剩 1 个子节点）。
+ *
+ * 性能约束：绝不能把兄弟节点"提升"到父 split 的位置 —— 那会让该位置的
+ * React 元素类型从 <Allotment> 翻转为 <EditorGroup>，React 将卸载整棵子树
+ * 重新挂载，存活文档随之全部重新解析（关标签卡顿的根因）。
+ * 单子 split 不可见，且会随子节点继续移除而自动收敛（mapTree 返回 null）。
+ */
 export function promoteSibling(root: LayoutNode, groupId: string): LayoutNode {
-  const parentSplit = findParentSplit(root, groupId)
-  if (!parentSplit) return removeNode(root, groupId)
-
-  const siblings = parentSplit.children.filter((c) => c.id !== groupId)
-  if (siblings.length === 0) return removeNode(root, groupId)
-
-  // Only one sibling → lift it to the parent Split's position
-  if (siblings.length === 1) {
-    return replaceNode(root, parentSplit.id, siblings[0])
-  }
-
-  // Multiple siblings → keep the Split, just remove the target group
   return removeNode(root, groupId)
 }
 

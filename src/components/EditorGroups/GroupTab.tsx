@@ -30,6 +30,8 @@ export function GroupTab({ tab, groupId, isActive, onClick, onClose, onContextMe
   return (
     <div
       draggable
+      data-tab-id={tab.id}
+      data-tab-active={isActive ? 'true' : undefined}
       onDragStart={handleDragStart}
       onClick={onClick}
       onContextMenu={onContextMenu}
@@ -60,6 +62,7 @@ export function GroupTab({ tab, groupId, isActive, onClick, onClose, onContextMe
         icon={X}
         title="Close"
         size="sm"
+        data-tab-close={tab.id}
         onClick={onClose}
         className={`flex-shrink-0 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
       />

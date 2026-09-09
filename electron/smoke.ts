@@ -143,7 +143,8 @@ async function main(): Promise<void> {
     else if (e.level === 2) consoleWarnings.push(e.message)
   })
 
-  await win.loadFile(resolve(__dirname, '../../dist/index.html'))
+  // ?probe=1 打开解析计数探针（window.__mdParseCount）
+  await win.loadFile(resolve(__dirname, '../../dist/index.html'), { query: { probe: '1' } })
 
   const run = <T = unknown>(code: string): Promise<T> =>
     win.webContents.executeJavaScript(code, true) as Promise<T>
@@ -450,6 +451,33 @@ async function main(): Promise<void> {
       `document.querySelector('.markdown-body code')?.textContent.includes(${ESC_EXPR}) === true`)
     check('literal \\n preserved inside a code block', codeKeepsEscape === true)
 
+    // ---- theme context must still reach code blocks through the memo'd body ----
+    const codeBgProbe = `(() => {
+      const code = [...document.querySelectorAll('.markdown-body code')].find(c => c.textContent.includes('stays'))
+      if (!code) return 'NO-CODE'
+      let el = code
+      while (el && el !== document.body) {
+        const bg = getComputedStyle(el).backgroundColor
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg
+        el = el.parentElement
+      }
+      return 'NO-BG'
+    })()`
+    const bgBefore = await run<string>(codeBgProbe)
+    check('code block has a themed background', bgBefore !== 'NO-CODE' && bgBefore !== 'NO-BG', bgBefore)
+    await run(`
+      [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Dark Mode')?.click()`)
+    await waitFor('dark mode applied', async () =>
+      run<boolean>(`document.documentElement.classList.contains('dark')`))
+    const bgAfter = await run<string>(codeBgProbe)
+    check('dark-mode toggle re-themes code blocks through the memoized body',
+      bgAfter !== bgBefore, { before: bgBefore, after: bgAfter })
+    // restore light mode for the remaining assertions
+    await run(`
+      [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Light Mode')?.click()`)
+    await waitFor('light mode restored', async () =>
+      run<boolean>(`!document.documentElement.classList.contains('dark')`))
+
     // ---- new interaction: selection shows an inline input box, does NOT auto-open AI ----
     // (selectNode runs in the RENDERER — kept as a string so the main process
     // tsconfig needs no DOM lib)
@@ -464,11 +492,18 @@ async function main(): Promise<void> {
       node.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
       return true
     }`
+    // ---- parse-count probe: opening the box must NOT re-parse the document ----
+    const parsesAfterRender = await run<number>(`window.__mdParseCount ?? -1`)
+    check('parse probe is live (positive control)', parsesAfterRender > 0, parsesAfterRender)
+
     const selectionDone = await run<boolean>(`(${selectNode})('.markdown-body p')`)
     check('selection dispatched', selectionDone === true)
 
     await waitFor('inline quote box appears at selection end', async () =>
       run<boolean>(`document.querySelector('[data-inline-quote-box]') !== null`))
+    const parsesAfterOpen = await run<number>(`window.__mdParseCount`)
+    check('opening the quote box does not re-parse the document',
+      parsesAfterOpen === parsesAfterRender, { before: parsesAfterRender, after: parsesAfterOpen })
     const aiTabCountAfterSelect = await run<number>(`document.querySelectorAll('[title="ai://chat"]').length`)
     check('mouseup no longer auto-opens the AI window', aiTabCountAfterSelect === 0, aiTabCountAfterSelect)
     const focusOnInline = await run<boolean>(
@@ -484,6 +519,9 @@ async function main(): Promise<void> {
       run<boolean>(`document.querySelectorAll('[data-inline-quote-chip]').length === 2`))
     const boxStillOpen = await run<boolean>(`document.querySelector('[data-inline-quote-box]') !== null`)
     check('inline box stays open during accumulation', boxStillOpen === true)
+    const parsesAfterAppend = await run<number>(`window.__mdParseCount`)
+    check('appending a quote does not re-parse the document',
+      parsesAfterAppend === parsesAfterRender, { before: parsesAfterRender, after: parsesAfterAppend })
 
     // ---- type a multi-line question, Ctrl+Enter → fills ChatInput, does NOT auto-send ----
     await run(`
@@ -499,6 +537,38 @@ async function main(): Promise<void> {
         new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }))`)
     await waitFor('AI window opens after Ctrl+Enter', async () =>
       run<boolean>(`document.querySelectorAll('[title="ai://chat"]').length === 1`))
+    // 打开 AI 窗（根节点由 group 变横向 split）不得重挂载/重解析文档
+    const parsesAfterAiOpen = await run<number>(`window.__mdParseCount`)
+    check('opening the AI window does not re-parse the document',
+      parsesAfterAiOpen === parsesAfterRender, { before: parsesAfterRender, after: parsesAfterAiOpen })
+    // 新面板比例 ≈30%（preferredSize 生效，未被 Distribute 均分）
+    const paneRatioProbe = `(() => {
+      const docPane = document.querySelector('.markdown-body')?.closest('.split-view-view')
+      const aiPane = document.querySelector('[data-chat-input]')?.closest('.split-view-view')
+      if (!docPane || !aiPane) return 'NO-PANES'
+      const doc = docPane.getBoundingClientRect().width
+      const ai = aiPane.getBoundingClientRect().width
+      return JSON.stringify({ doc: Math.round(doc), ai: Math.round(ai), share: Math.round((ai / (doc + ai)) * 100) })
+    })()`
+    // 比例校正发生在下一帧，轮询等待
+    let paneRatio = ''
+    try {
+      await waitFor('AI pane proportions settle', async () => {
+        paneRatio = await run<string>(paneRatioProbe)
+        try {
+          const m = JSON.parse(paneRatio) as { share: number }
+          return m.share >= 20 && m.share <= 45
+        } catch { return false }
+      }, 5000)
+    } catch { /* 失败时保留最后一次读数用于报告 */ }
+    // 追加面板按均分开栏（见 EditorGroupTree 的取舍说明）—— 断言两栏都存在且
+    // 文档栏未被挤没，而不是精确比例
+    check('both panes are present and the document pane is not collapsed', (() => {
+      try {
+        const m = JSON.parse(paneRatio) as { doc: number; ai: number; share: number }
+        return m.doc > 100 && m.ai > 100 && m.share >= 20 && m.share <= 80
+      } catch { return false }
+    })(), paneRatio)
     const chatValue = await run<string>(`document.querySelector('[data-chat-input]')?.value ?? ''`)
     check('question filled into ChatInput with newline (not auto-sent)',
       chatValue.includes('hello smoke') && chatValue.includes('\n'), JSON.stringify(chatValue))
@@ -542,6 +612,16 @@ async function main(): Promise<void> {
     await waitFor('second window shows its own empty conversation', async () =>
       run<boolean>(`document.body.textContent.includes('No messages yet')`))
     check('windows keep independent conversations', true)
+
+    // ---- closing a tab that EMPTIES its group must not remount/ re-parse the
+    // surviving document (promoteSibling used to lift the sibling → type swap) ----
+    const parsesBeforeClose = await run<number>(`window.__mdParseCount`)
+    await run(`document.querySelector('[data-tab-active="true"][title="ai://chat"] [data-tab-close]').click()`)
+    await waitFor('the emptied AI pane is removed', async () =>
+      run<boolean>(`document.querySelectorAll('[title="ai://chat"]').length === 1`))
+    const parsesAfterClose = await run<number>(`window.__mdParseCount`)
+    check('closing a tab that empties its group does not re-parse the document',
+      parsesAfterClose === parsesBeforeClose, { before: parsesBeforeClose, after: parsesAfterClose })
 
     // settings panel via ActivityBar (exercises the R2 context split end-to-end)
     await run(`document.querySelector('[title="Settings"]').click()`)

@@ -316,6 +316,9 @@ const LayoutDispatchContext = createContext<React.Dispatch<LayoutAction> | null>
 const UIStateContext = createContext<UIStateView | null>(null)
 const AIChatStateContext = createContext<AIChatState | null>(null)
 const UIDispatchContext = createContext<React.Dispatch<UIAction> | null>(null)
+// 仅承载主题（boolean 原始值，Object.is 比较天然稳定）—— 代码块等高开销
+// 消费者只订阅它，不再被拖拽/侧栏等无关 UI 状态变更牵连
+const DarkModeContext = createContext(false)
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [layoutState, layoutDispatch] = useReducer(layoutReducer, initialLayout)
@@ -395,7 +398,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         <UIStateContext.Provider value={uiStateValue}>
           <AIChatStateContext.Provider value={aiStateValue}>
             <UIDispatchContext.Provider value={uiDispatch}>
-              {children}
+              <DarkModeContext.Provider value={uiState.darkMode}>
+                {children}
+              </DarkModeContext.Provider>
             </UIDispatchContext.Provider>
           </AIChatStateContext.Provider>
         </UIStateContext.Provider>
@@ -430,6 +435,11 @@ export function useLayoutDispatch(): React.Dispatch<LayoutAction> {
   const dispatch = useContext(LayoutDispatchContext)
   if (!dispatch) throw new Error('useLayoutDispatch must be used within AppProvider')
   return dispatch
+}
+
+/** 只订阅主题的 hook —— 与拖拽/聊天等高频 UI 状态解耦 */
+export function useDarkMode(): boolean {
+  return useContext(DarkModeContext)
 }
 
 export function useUIDispatch(): React.Dispatch<UIAction> {

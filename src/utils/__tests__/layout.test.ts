@@ -162,15 +162,37 @@ describe('removeNode (via promoteSibling / closeGroup)', () => {
     expect(findGroup(afterA, gA.id)).toBeNull()
     expect(findGroup(afterA, gB.id)).not.toBeNull()
 
-    // close gB: the inner split collapses entirely and gLeft is lifted to the
-    // root — no replacement ghost group, no zero-size pane (B10)
+    // close gB: the inner split is removed; the OUTER split survives with a
+    // single child — no ghost group, no zero-size pane (B10), and crucially the
+    // split's identity is preserved so React does not remount the surviving pane
     const afterB = promoteSibling(afterA, gB.id)
     const problems = assertLayoutInvariants(afterB, gLeft.id, 'l')
     expect(problems).toEqual([])
     const tabs = collectAllTabs(afterB)
     expect(tabs.map((t) => t.id)).toEqual(['l'])
-    // the root is now the surviving group itself (split lifted away)
-    expect(afterB.type).toBe('group')
+    expect(isSplitNode(afterB)).toBe(true)
+    if (isSplitNode(afterB)) {
+      expect(afterB.id).toBe('outer')
+      expect(afterB.children).toHaveLength(1)
+      expect(afterB.children[0].id).toBe(gLeft.id)
+      expect(afterB.sizes).toEqual([100])
+    }
+  })
+
+  it('promoteSibling keeps surviving nodes by reference (no React remount)', () => {
+    const gA = groupWith(tab('a', 'file-a'))
+    const gB = groupWith(tab('b', 'file-b'))
+    const root: LayoutNode = {
+      type: 'split', id: 'split-1', direction: 'horizontal',
+      children: [gA, gB], sizes: [50, 50],
+    }
+    const result = promoteSibling(root, gB.id)
+    // 引用相等是"React 不会卸载重挂载"的充要依据
+    expect(isSplitNode(result)).toBe(true)
+    if (isSplitNode(result)) {
+      expect(result).not.toBe(root)
+      expect(result.children[0]).toBe(gA)
+    }
   })
 })
 

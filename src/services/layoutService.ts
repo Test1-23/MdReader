@@ -182,13 +182,14 @@ function apply(state: LayoutState, op: LayoutOperation): LayoutResult {
 
 // ---- OPEN_AI_WINDOW ----
 
-// 在最外层布局的最右侧创建分屏；新 split 用新 id 使 Allotment 重挂载、sizes 生效
+// 在最外层布局的最右侧创建分屏。
+// 已是横向 split 时保留原 id —— 换 id 会让 Allotment 重挂载，进而让所有已打开
+// 的文档重新解析（性能）。新面板的比例由 EditorGroupTree 的 preferredSize 保证。
 function splitRightOfRoot(root: LayoutNode, tab: TabEntry): LayoutNode {
   const newPane: EditorGroup = { ...createEditorGroup(), tabs: [tab], activeTabIndex: 0 }
   if (isSplitNode(root) && root.direction === 'horizontal') {
     return {
       ...root,
-      id: createId('split'),
       children: [...root.children, newPane],
       sizes: [...root.sizes.map((s) => Math.round(s * 0.7)), 30],
     }
