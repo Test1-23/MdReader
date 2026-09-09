@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useLayoutContext, useUIDispatch } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
 import { readDroppedMarkdownFiles, generateTabId, openFileByPath } from '../../utils/fileReader'
@@ -50,7 +50,8 @@ interface EditorGroupProps {
   group: EditorGroupType
 }
 
-export function EditorGroup({ group }: EditorGroupProps) {
+// memo：mapTree 保留未受影响 group 的对象引用 —— 其它分组的布局操作不会让本组重渲染
+export const EditorGroup = memo(function EditorGroup({ group }: EditorGroupProps) {
   const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
   const uiDispatch = useUIDispatch()
   const { readFile, isElectron } = useElectronAPI()
@@ -249,4 +250,4 @@ export function EditorGroup({ group }: EditorGroupProps) {
       )}
     </div>
   )
-}
+})

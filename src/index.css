@@ -191,6 +191,14 @@
   @apply my-4 rounded-xl overflow-hidden;
 }
 
+/* 长文档优化：屏幕外的代码块/表格跳过布局与绘制（保守起见只作用于这两种
+   重量级块，避免影响大纲平滑滚动与划选定位） */
+.markdown-body pre,
+.markdown-body table {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}
+
 /* Task list styling */
 .markdown-body input[type="checkbox"] {
   @apply mr-2;

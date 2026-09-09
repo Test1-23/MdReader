@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useDeferredValue } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -154,15 +154,14 @@ const COMPONENTS = {
   blockquote: BlockquoteRenderer,
 }
 
-interface MarkdownBodyProps {
-  content: string
-}
+// 大文档才启用延迟渲染，避免小文档切标签时闪回上一份内容
+const DEFER_THRESHOLD = 50_000
 
 /**
- * 只负责解析与渲染 markdown 本身。memo 以 content 为界 —— 任何与文档内容
- * 无关的状态变化（选区、内联引用框、拖拽、侧栏…）都不会触发重新解析。
+ * 内层解析组件：只有它调用 ReactMarkdown，因此 useDeferredValue 的"紧急渲染"
+ * 会在此处 memo bailout（旧内容引用未变），不会造成一次多余的解析。
  */
-export const MarkdownBody = memo(function MarkdownBody({ content }: MarkdownBodyProps) {
+const MarkdownParse = memo(function MarkdownParse({ content }: { content: string }) {
   // 冒烟探针：一次渲染 = 一次完整解析（remark → rehype-raw → KaTeX → Prism）
   bumpParseCount()
   return (
@@ -173,5 +172,29 @@ export const MarkdownBody = memo(function MarkdownBody({ content }: MarkdownBody
     >
       {content}
     </ReactMarkdown>
+  )
+})
+
+interface MarkdownBodyProps {
+  content: string
+}
+
+/**
+ * 只负责解析与渲染 markdown 本身。memo 以 content 为界 —— 任何与文档内容
+ * 无关的状态变化（选区、内联引用框、拖拽、侧栏…）都不会触发重新解析。
+ *
+ * 大文档用 useDeferredValue 让紧急交互（关标签、切标签）先完成绘制，重解析
+ * 在过渡渲染中进行；解析本身仍占主线程（并发渲染无法打断单个组件），
+ * 这里换来的是"交互即时响应"的感知。
+ */
+export const MarkdownBody = memo(function MarkdownBody({ content }: MarkdownBodyProps) {
+  const deferred = useDeferredValue(content)
+  const isLarge = content.length > DEFER_THRESHOLD
+  const effective = isLarge ? deferred : content
+  const isStale = effective !== content
+  return (
+    <div className={isStale ? 'opacity-60 transition-opacity duration-150' : undefined}>
+      <MarkdownParse content={effective} />
+    </div>
   )
 })

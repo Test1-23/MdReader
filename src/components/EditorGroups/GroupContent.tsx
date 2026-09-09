@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { useLayoutContext } from '../../context/AppContext'
 import type { TabEntry } from '../../types'
 import { AI_WINDOW_ID } from '../../utils/windowDescriptor'
@@ -9,7 +10,7 @@ interface GroupContentProps {
   tab: TabEntry
 }
 
-export function GroupContent({ tab }: GroupContentProps) {
+export const GroupContent = memo(function GroupContent({ tab }: GroupContentProps) {
   const { state } = useLayoutContext()
   const file = state.openFiles[tab.fileId]
 
@@ -39,4 +40,4 @@ export function GroupContent({ tab }: GroupContentProps) {
       )}
     </div>
   )
-}
+})

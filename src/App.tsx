@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { AppProvider, useLayoutContext, useUIContext } from './context/AppContext'
 import { collectAllTabs } from './utils/layout'
 import { useDragDrop } from './hooks/useDragDrop'
@@ -24,9 +24,11 @@ function AppContent() {
     document.documentElement.classList.toggle('dark', state.darkMode)
   }, [state.darkMode])
 
-  // 布局树中存在任何 tab（.md 或 AI 窗口）即视为有内容
-  const hasOpenFiles = layoutState.layoutRoot !== null
-    && collectAllTabs(layoutState.layoutRoot).length > 0
+  // 布局树中存在任何 tab（.md 或 AI 窗口）即视为有内容 —— 树遍历 memo 化，
+  // 避免每次布局变更都在渲染期走一遍整棵树
+  const hasOpenFiles = useMemo(() => (
+    layoutState.layoutRoot !== null && collectAllTabs(layoutState.layoutRoot).length > 0
+  ), [layoutState.layoutRoot])
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden relative bg-white dark:bg-gray-900">

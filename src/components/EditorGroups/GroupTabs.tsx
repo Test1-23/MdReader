@@ -11,19 +11,6 @@ interface GroupTabsProps {
 
 export function GroupTabs({ group, isActive }: GroupTabsProps) {
   const { state, dispatch } = useLayoutContext()
-  const handleTabClick = useCallback(
-    (tabId: string) => {
-      dispatch({ type: 'SET_ACTIVE_TAB', payload: { groupId: group.id, tabId: tabId } })
-    },
-    [group.id, dispatch]
-  )
-
-  const handleTabClose = useCallback(
-    (tabId: string) => {
-      dispatch({ type: 'CLOSE_TAB', payload: { groupId: group.id, tabId: tabId } })
-    },
-    [group.id, dispatch]
-  )
 
   // Context menu state (React-based, no DOM leaks)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null)
@@ -56,9 +43,7 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
           tab={tab}
           groupId={group.id}
           isActive={tab.id === state.activeTabId}
-          onClick={() => handleTabClick(tab.id)}
-          onClose={() => handleTabClose(tab.id)}
-          onContextMenu={(e) => handleContextMenu(e, tab.id)}
+          onContextMenu={handleContextMenu}
         />
       ))}
 
@@ -93,7 +78,7 @@ export function GroupTabs({ group, isActive }: GroupTabsProps) {
           <div
             className={MENU_ITEM}
             onClick={() => {
-              handleTabClose(contextMenu.tabId)
+              dispatch({ type: 'CLOSE_TAB', payload: { groupId: group.id, tabId: contextMenu.tabId } })
               setContextMenu(null)
             }}
           >

@@ -3,6 +3,7 @@ import type { LayoutState, LayoutAction, UIState, UIAction, UIStateView, AIChatS
 import {
   findGroup,
   findGroupContainingTab,
+  findSplit,
   transformNode,
   getActiveTab,
   resizeSplit,
@@ -185,9 +186,16 @@ function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
       return { ...state, layoutRoot: newLayout }
     }
     case 'RESIZE_SPLIT': {
-      // D4: Allotment 受控化 — 拖动/关闭 pane 后的比例回写
+      // 拖动 sash 结束时的比例回写（每次拖拽一次，不再每帧）
       if (!state.layoutRoot) return state
-      return { ...state, layoutRoot: resizeSplit(state.layoutRoot, action.payload.splitId, action.payload.sizes) }
+      const { splitId, sizes } = action.payload
+      // 相等性 guard：比例未变则不产生新 state（避免无意义的全量重渲染）
+      const current = findSplit(state.layoutRoot, splitId)
+      if (current && current.sizes.length === sizes.length
+        && current.sizes.every((s, i) => s === sizes[i])) {
+        return state
+      }
+      return { ...state, layoutRoot: resizeSplit(state.layoutRoot, splitId, sizes) }
     }
     default:
       return state

@@ -374,6 +374,17 @@ function removeNode(root: LayoutNode, targetId: string): LayoutNode {
 
 // ---- Find Operations ----
 
+export function findSplit(root: LayoutNode, splitId: string): SplitNode | null {
+  if (isEditorGroup(root)) return null
+  const split = root as SplitNode
+  if (split.id === splitId) return split
+  for (const child of split.children) {
+    const found = findSplit(child, splitId)
+    if (found) return found
+  }
+  return null
+}
+
 export function findGroup(root: LayoutNode, groupId: string): EditorGroup | null {
   if (isEditorGroup(root)) {
     return root.id === groupId ? root : null
