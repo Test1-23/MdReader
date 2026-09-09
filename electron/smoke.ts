@@ -17,7 +17,7 @@
 //   4. SSE streaming — complete / truncated / error payload / cancel / endpoint validation
 //   5. renderer UI — boot without console errors, drag-drop file open, settings panel
 
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage } from 'electron'
 import { resolve } from 'path'
 import { writeFile, rm, readFile, mkdtemp } from 'fs/promises'
 import { tmpdir } from 'os'
@@ -157,6 +157,20 @@ async function main(): Promise<void> {
       await sleep(250)
     }
     throw new Error(`timeout waiting for ${desc}`)
+  }
+
+  // ══════════════ Phase 0: app icon asset ══════════════
+  console.log('\nPhase 0 — app icon')
+  {
+    const iconPath = resolve(__dirname, '../../assets/icon.png')
+    const icon = nativeImage.createFromPath(iconPath)
+    const size = icon.getSize()
+    check('app icon loads from assets/icon.png', !icon.isEmpty(), size)
+    check('app icon is 1024x1024', size.width === 1024 && size.height === 1024, size)
+    const bitmap = icon.toBitmap() // BGRA
+    check('app icon corners are transparent', bitmap[3] === 0, bitmap[3])
+    const centerAlpha = bitmap[(Math.floor(size.height / 2) * size.width + Math.floor(size.width / 2)) * 4 + 3]
+    check('app icon center is opaque', centerAlpha === 255, centerAlpha)
   }
 
   // ══════════════ Phase 1: file read / authorization / size limit / encoding ══════════════

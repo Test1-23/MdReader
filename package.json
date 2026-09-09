@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:smoke": "npm run build && tsc electron/smoke.ts --outDir .smoke-build --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --lib es2020 && electron .smoke-build/electron/smoke.js",
+    "icon:generate": "electron scripts/generate-icon.mjs",
     "electron:build": "npm run build && electron-builder",
     "electron:preview": "npm run build && electron ."
   },

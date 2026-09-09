@@ -10,6 +10,9 @@ let mainWindow: BrowserWindow | null = null
 
 setMainWindowGetter(() => mainWindow)
 
+// 窗口/任务栏图标 —— 打包后与 dev 使用同一相对路径（assets/** 已随 asar 打包）
+const APP_ICON = join(__dirname, '../assets/icon.png')
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
@@ -17,6 +20,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'MdReader',
+    icon: APP_ICON,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -61,6 +65,10 @@ function registerIpcHandlers() {
 }
 
 app.whenReady().then(() => {
+  // Windows 任务栏按 AppUserModelID 归组（与 electron-builder 的 appId 一致）
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.mdreader.app')
+  }
   registerIpcHandlers()
   createWindow()
 })

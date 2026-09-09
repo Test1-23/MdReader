@@ -96,6 +96,13 @@ npm run dev
 npm run build
 ```
 
+### App Icon
+The app icon lives in `assets/` — `icon.svg` is the design source, `icon.png` (1024×1024, transparent) is what ships. To regenerate the PNG after editing the SVG:
+
+```bash
+npm run icon:generate
+```
+
 ## Usage
 
 ### Opening Files
