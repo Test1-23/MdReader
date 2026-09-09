@@ -3,6 +3,7 @@ import { useAIContext } from '../../context/AppContext'
 import type { Conversation } from '../../utils/conversationTree'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { IconButton } from '../shared/IconButton'
+import { EMPTY_HINT } from '../shared/classes'
 
 interface ConversationListProps {
   conv: Conversation | null
@@ -49,7 +50,7 @@ export function ConversationList({ conv, onSelect, onRename, onDelete, onNew }: 
       {/* 对话列表 */}
       <div className="flex-1 overflow-y-auto py-1">
         {state.conversationList.length === 0 && (
-          <div className="px-4 py-8 text-center text-xs text-chrome-text-faint">
+          <div className={EMPTY_HINT}>
             暂无已保存的对话
           </div>
         )}

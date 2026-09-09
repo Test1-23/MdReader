@@ -3,7 +3,6 @@ import { getAssistantReply, getUserChildren } from './conversationTree'
 
 // ---- Layout Constants ----
 
-export const COL_WIDTH = 220
 export const ROW_HEIGHT = 64
 export const MARGIN_X = 60
 export const MARGIN_Y = 30

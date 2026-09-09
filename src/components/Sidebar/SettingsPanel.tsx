@@ -12,20 +12,13 @@ export function SettingsPanel() {
   const [hasKey, setHasKey] = useState(state.apiKeySaved)
   const [saved, setSaved] = useState(false)
 
+  // 配置由 AppProvider 在启动时统一加载到 context（单一数据源）——这里只做同步，
+  // 不再重复请求一次 loadApiConfig
   useEffect(() => {
-    // Load saved config on mount — S1: the key itself never comes back to the
-    // renderer, only whether one is stored.
-    if (isElectron && window.electronAPI) {
-      window.electronAPI.loadApiConfig().then((config) => {
-        if (config) {
-          setEndpoint(config.endpoint)
-          setModel(config.model)
-          setHasKey(config.hasKey)
-          dispatch({ type: 'SETTINGS_UPDATE', payload: { endpoint: config.endpoint, model: config.model, hasKey: config.hasKey } })
-        }
-      }).catch(() => { /* no config file */ })
-    }
-  }, [isElectron, dispatch])
+    setEndpoint(state.apiEndpoint)
+    setModel(state.apiModel)
+    setHasKey(state.apiKeySaved)
+  }, [state.apiEndpoint, state.apiModel, state.apiKeySaved])
 
   // Clean up the "Saved ✓" timer on unmount
   useEffect(() => {

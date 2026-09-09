@@ -19,3 +19,10 @@ export const MENU_ITEM =
 /** Tiny action button base (ChatBubble) */
 export const BTN_BASE =
   'inline-flex items-center gap-1 px-1.5 py-1 text-[10px] rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+
+/** ChatBubble 操作按钮的配色（4 处共用） */
+export const CHAT_ACTION_BTN =
+  'text-chrome-text-faint hover:text-chrome-text hover:bg-chrome-hover'
+
+/** 空态提示文字（侧栏/会话列表共用） */
+export const EMPTY_HINT = 'px-4 py-8 text-center text-xs text-chrome-text-faint'

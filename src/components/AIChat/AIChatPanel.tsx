@@ -1,15 +1,16 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useLayoutContext, useUIContext, useAIContext } from '../../context/AppContext'
 import {
-  createConversation, addUserNode, addAssistantNode, switchBranch, getAssistantReply,
+  createConversation, addUserNode, addAssistantNode, canAppendTo, switchBranch, getAssistantReply,
   replaceNodeContent, replaceAssistantReply,
 } from '../../utils/conversationTree'
-import type { Conversation } from '../../utils/conversationTree'
 import { findGroup, findGroupContainingTab, getActiveTab } from '../../utils/layout'
 import { useAiStream } from '../../hooks/useAiStream'
 import type { ConvUpdater } from '../../hooks/useAiStream'
 import { useDebouncedPersist } from '../../hooks/useDebouncedPersist'
+import { useLatestRef } from '../../hooks/useLatestRef'
 import { persistConversation, loadValidatedConversation } from '../../utils/conversationPersistence'
+import { reportError } from '../../utils/errorReporting'
 import { VIEW_BTN_INACTIVE } from '../shared/classes'
 import { MessageSquare, GitBranch, History, Plus, X } from 'lucide-react'
 import { PanelHeader } from '../shared/PanelHeader'
@@ -84,12 +85,13 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
 
   // ---- handler 稳定化（配合 ChatView/ChatBubble memo）——
   // 全部经 ref 读取最新值，依赖数组为空，身份跨渲染恒定
-  const convRef = useRef<Conversation>(conv)
-  convRef.current = conv
-  const pendingQuotesRef = useRef(aiState.pendingQuotes)
-  pendingQuotesRef.current = aiState.pendingQuotes
-  const uiSettingsRef = useRef({ endpoint: uiState.apiEndpoint, keySaved: uiState.apiKeySaved, model: uiState.apiModel })
-  uiSettingsRef.current = { endpoint: uiState.apiEndpoint, keySaved: uiState.apiKeySaved, model: uiState.apiModel }
+  const convRef = useLatestRef(conv)
+  const pendingQuotesRef = useLatestRef(aiState.pendingQuotes)
+  const uiSettingsRef = useLatestRef({
+    endpoint: uiState.apiEndpoint,
+    keySaved: uiState.apiKeySaved,
+    model: uiState.apiModel,
+  })
 
   // ---- 停止生成（B1：取消事件会 resolve 流 Promise，UI 自动恢复）----
   const handleStop = useCallback(() => {
@@ -104,6 +106,11 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     const settings = uiSettingsRef.current
     // 多引用：所有待发引用附到本条消息，发送后清空（全局，所有窗口同步）
     const quotes = pendingQuotesRef.current
+    if (!canAppendTo(current)) {
+      // 数据损坏时 addUserNode 会静默返回原对话 —— 消息会凭空消失，必须让用户知道
+      reportError('当前对话数据异常，消息未发送。请在 🗂 会话列表中新建对话。')
+      return
+    }
     const updated = addUserNode(current, message, quotes.length > 0 ? quotes.map((q) => q.text) : undefined)
     setConv(updated)
     aiDispatch({ type: 'CLEAR_QUOTES' })
@@ -217,7 +224,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const refreshList = useCallback(() => {
     window.electronAPI?.listConversations()?.then((list) => {
       aiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
-    }).catch(() => {})
+    }).catch((err: unknown) => reportError('读取对话列表失败', err))
   }, [aiDispatch])
 
   const handleNewChat = useCallback(() => {
@@ -253,14 +260,24 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
     }
     const data = await loadValidatedConversation(id)
     if (data) {
-      await window.electronAPI?.saveConversation(id, { ...data, title })
-      refreshList()
+      try {
+        await window.electronAPI?.saveConversation(id, { ...data, title })
+        refreshList()
+      } catch (err: unknown) {
+        reportError(`重命名失败：${err instanceof Error ? err.message : String(err)}`, err)
+      }
     }
   }, [setConv, refreshList])
 
   const handleDeleteConversation = useCallback(async (id: string) => {
     if (convRef.current.id === id) stream.stop()
-    await window.electronAPI?.deleteConversation(id)
+    try {
+      await window.electronAPI?.deleteConversation(id)
+    } catch (err: unknown) {
+      // 删除失败必须可见 —— 否则用户以为删掉了，刷新后对话又回来了
+      reportError(`删除对话失败：${err instanceof Error ? err.message : String(err)}`, err)
+      return
+    }
     // 全窗口同步：任何持有该对话的 AI 窗口都重置（claim 效果自愈新建），
     // 防止"已删对话复活"被再次落盘
     aiDispatch({ type: 'REMOVE_CONVERSATION_BY_ID', payload: { convId: id } })

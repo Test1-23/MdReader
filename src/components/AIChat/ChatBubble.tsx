@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, memo } from 'react'
 import type { ChatNode } from '../../utils/conversationTree'
-import { BTN_BASE } from '../shared/classes'
+import { BTN_BASE, CHAT_ACTION_BTN } from '../shared/classes'
 import {
   User, Bot, ChevronDown, ChevronRight, Clipboard, Check, Pencil, RefreshCw, Loader2,
 } from 'lucide-react'
@@ -171,7 +171,7 @@ export const ChatBubble = memo(function ChatBubble({
         <div className="flex gap-1 mt-0.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={handleCopyClick}
-            className={`${BTN_BASE} text-chrome-text-faint hover:text-chrome-text hover:bg-chrome-hover ${copied ? '!text-green-500' : ''}`}
+            className={`${BTN_BASE} ${CHAT_ACTION_BTN} ${copied ? '!text-green-500' : ''}`}
             title="复制"
           >
             {copied ? <Check size={12} /> : <Clipboard size={12} />}
@@ -182,7 +182,7 @@ export const ChatBubble = memo(function ChatBubble({
               <button
                 onClick={() => onEditStart(node.id)}
                 disabled={loading}
-                className={`${BTN_BASE} text-chrome-text-faint hover:text-chrome-text hover:bg-chrome-hover`}
+                className={`${BTN_BASE} ${CHAT_ACTION_BTN}`}
                 title="编辑"
               >
                 <Pencil size={12} />
@@ -191,7 +191,7 @@ export const ChatBubble = memo(function ChatBubble({
               <button
                 onClick={() => onRegenerate(node.id)}
                 disabled={loading}
-                className={`${BTN_BASE} text-chrome-text-faint hover:text-chrome-text hover:bg-chrome-hover`}
+                className={`${BTN_BASE} ${CHAT_ACTION_BTN}`}
                 title="重发（覆盖回复）"
               >
                 {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
@@ -202,7 +202,7 @@ export const ChatBubble = memo(function ChatBubble({
             <button
               onClick={() => onRegenerate(node.id)}
               disabled={loading}
-              className={`${BTN_BASE} text-chrome-text-faint hover:text-chrome-text hover:bg-chrome-hover`}
+              className={`${BTN_BASE} ${CHAT_ACTION_BTN}`}
               title="重新生成"
             >
               {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}

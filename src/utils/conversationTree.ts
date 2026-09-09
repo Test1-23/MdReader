@@ -49,6 +49,12 @@ export function createConversation(title?: string): Conversation {
 
 // ---- Add Nodes ----
 
+/** 节点是否成功挂入 —— 调用方据此判断消息是否被静默丢弃 */
+export function canAppendTo(conv: Conversation, parentId?: string): boolean {
+  const parent = parentId || conv.activeNodeId || conv.rootId
+  return !parent || !!conv.nodes[parent]
+}
+
 export function addUserNode(
   conv: Conversation,
   content: string,
@@ -149,20 +155,6 @@ export function getActivePath(conv: Conversation): ChatNode[] {
   return getPath(conv, conv.activeNodeId)
 }
 
-// ---- Children / Siblings ----
-
-export function getChildren(conv: Conversation, nodeId: string): ChatNode[] {
-  const node = conv.nodes[nodeId]
-  if (!node) return []
-  return node.childrenIds.map((id) => conv.nodes[id]).filter(Boolean)
-}
-
-export function getSiblings(conv: Conversation, nodeId: string): ChatNode[] {
-  const node = conv.nodes[nodeId]
-  if (!node || !node.parentId) return []
-  return getChildren(conv, node.parentId)
-}
-
 // ---- Content Operations ----
 
 // 替换任意节点内容（用于编辑/重新生成）
@@ -239,58 +231,6 @@ export function getUserChildren(conv: Conversation, userNodeId: string): ChatNod
     }
   }
   return result
-}
-
-// ---- Build Messages for API ----
-
-// B14: cap the injected document so a multi-MB file cannot blow the context
-// window or the token bill. Keep head + tail so the structure stays visible.
-const MAX_DOCUMENT_CONTEXT_CHARS = 24000
-
-function truncateDocument(content: string): string {
-  if (content.length <= MAX_DOCUMENT_CONTEXT_CHARS) return content
-  const half = Math.floor(MAX_DOCUMENT_CONTEXT_CHARS / 2)
-  return `${content.slice(0, half)}\n\n... (document truncated for context limits) ...\n\n${content.slice(-half)}`
-}
-
-export function buildMessages(
-  conv: Conversation,
-  nodeId: string,
-  userInput: string,
-  selectedTexts?: string[],
-  documentContent?: string
-): Array<{ role: string; content: string }> {
-  const path = getPath(conv, nodeId)
-  const messages: Array<{ role: string; content: string }> = []
-
-  // System message: whole document wrapped in <document> + context
-  const sysParts = [
-    'You are a helpful assistant. The user is reading a Markdown document and has selected some text for context. Answer concisely.',
-  ]
-  if (documentContent) {
-    sysParts.push(`\n\nThe document the user is reading:\n<document>\n${truncateDocument(documentContent)}\n</document>`)
-  }
-  messages.push({ role: 'system', content: sysParts.join('') })
-
-  // B3: history excludes the last path node — getPath includes nodeId itself,
-  // and the current user message is re-sent below with its quoted selection.
-  // Sending it here too would duplicate the turn (double tokens, degraded output).
-  for (const node of path.slice(0, -1)) {
-    if (node.role === 'system') continue
-    messages.push({ role: node.role, content: node.content })
-  }
-
-  // Current user message with quoted selections — each quote is its own block
-  const quoteBlocks = (selectedTexts ?? []).map((text) => {
-    const quoted = text.split('\n').map((line) => `> ${line}`).join('\n')
-    return `Selected text from document:\n${quoted}`
-  })
-  const userContent = quoteBlocks.length > 0
-    ? `${quoteBlocks.join('\n\n')}\n\n${userInput}`
-    : userInput
-  messages.push({ role: 'user', content: userContent })
-
-  return messages
 }
 
 // ---- Validation / Repair (R6) ----

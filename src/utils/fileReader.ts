@@ -97,20 +97,31 @@ export async function readDroppedFile(
 
 // E7: shared drop pipeline — filter markdown files, read, skip failures.
 // Callers decide how to dispatch the resulting OpenFile payloads.
+export interface DroppedFilesResult {
+  opened: OpenFile[]
+  /** 读取失败的原因（文件过大/无权限…）—— 调用方应展示第一条，
+   *  而不是把失败统一报成"没有找到 markdown 文件" */
+  errors: string[]
+}
+
 export async function readDroppedMarkdownFiles(
   files: File[],
   readFile: ReadFileFn,
   isElectron: boolean
-): Promise<OpenFile[]> {
+): Promise<DroppedFilesResult> {
   const mdFiles = files.filter((f) => isMarkdownFile(f.name))
-  const results: OpenFile[] = []
+  const opened: OpenFile[] = []
+  const errors: string[] = []
   for (const file of mdFiles) {
     try {
       const openFile = await readDroppedFile(file, readFile, isElectron)
-      if (openFile) results.push(openFile)
-    } catch { /* skip failed files */ }
+      if (openFile) opened.push(openFile)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      errors.push(`${file.name}: ${msg}`)
+    }
   }
-  return results
+  return { opened, errors }
 }
 
 // E8: unified id factory (prefix + timestamp + entropy)

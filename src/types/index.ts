@@ -125,14 +125,12 @@ export interface PendingQuote {
   text: string
 }
 
-// R2: AI 状态切片 — 独立 Context，聊天每 token 更新不再触达布局/UI 消费者
-export interface AIChatState {
-  pendingQuotes: PendingQuote[]
-  aiConversations: Record<string, Conversation>
-  startupConversation: Conversation | null
-  conversationList: Array<{ id: string; title: string; updatedAt: number }>
-  pendingDraft: string | null
-}
+// R2: AI 状态切片 — 独立 Context，聊天每 token 更新不再触达布局/UI 消费者。
+// 用 Pick 从 UIState 派生，字段增删时不会两边漂移。
+export type AIChatState = Pick<
+  UIState,
+  'pendingQuotes' | 'aiConversations' | 'startupConversation' | 'conversationList' | 'pendingDraft'
+>
 
 export type UIStateView = Omit<UIState, 'pendingQuotes' | 'aiConversations' | 'startupConversation' | 'conversationList' | 'pendingDraft'>
 

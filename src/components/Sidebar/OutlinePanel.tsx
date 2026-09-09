@@ -1,25 +1,22 @@
 import { useLayoutContext } from '../../context/AppContext'
-import { findGroupContainingTab } from '../../utils/layout'
+import { findTab } from '../../utils/layout'
 import { headingToId } from '../../utils/markdown'
+import { EMPTY_HINT } from '../shared/classes'
 
 export function OutlinePanel() {
   const { state } = useLayoutContext()
 
   // Get the active file's headings
-  const activeFileId = (() => {
-    if (!state.activeTabId || !state.layoutRoot) return null
-    const group = findGroupContainingTab(state.layoutRoot, state.activeTabId)
-    if (!group) return null
-    const tab = group.tabs.find((t) => t.id === state.activeTabId)
-    return tab?.fileId ?? null
-  })()
+  const activeFileId = state.layoutRoot && state.activeTabId
+    ? findTab(state.layoutRoot, state.activeTabId)?.fileId ?? null
+    : null
 
   const activeFile = activeFileId ? state.openFiles[activeFileId] : null
   const headings = activeFile?.headings ?? []
 
   if (!activeFile) {
     return (
-      <div className="px-4 py-8 text-center text-xs text-chrome-text-faint">
+      <div className={EMPTY_HINT}>
         Open a markdown file to see its outline
       </div>
     )
@@ -27,7 +24,7 @@ export function OutlinePanel() {
 
   if (headings.length === 0) {
     return (
-      <div className="px-4 py-8 text-center text-xs text-chrome-text-faint">
+      <div className={EMPTY_HINT}>
         No headings found in this document
       </div>
     )

@@ -293,12 +293,6 @@ export function moveTab(
   })
 }
 
-// ---- Close Group ----
-
-export function closeGroup(root: LayoutNode, groupId: string): LayoutNode {
-  return removeNode(root, groupId)
-}
-
 // ---- Resize Split ----
 
 export function resizeSplit(root: LayoutNode, splitId: string, sizes: number[]): LayoutNode {
@@ -419,22 +413,14 @@ export function findGroupContainingTab(root: LayoutNode, tabId: string): EditorG
   return findGroupWhere(root, (t) => t.id === tabId)
 }
 
-export function findGroupContainingFileId(root: LayoutNode, fileId: string): EditorGroup | null {
-  return findGroupWhere(root, (t) => t.fileId === fileId)
+/** tabId → TabEntry（4 处 findGroupContainingTab + tabs.find 的组合收敛于此） */
+export function findTab(root: LayoutNode, tabId: string): TabEntry | null {
+  const group = findGroupContainingTab(root, tabId)
+  return group?.tabs.find((t) => t.id === tabId) ?? null
 }
 
-export function findParentSplit(root: LayoutNode, childId: string): SplitNode | null {
-  if (isEditorGroup(root)) return null
-
-  const split = root as SplitNode
-  for (const child of split.children) {
-    if (child.id === childId) return split
-    if (!isEditorGroup(child)) {
-      const found = findParentSplit(child, childId)
-      if (found) return found
-    }
-  }
-  return null
+export function findGroupContainingFileId(root: LayoutNode, fileId: string): EditorGroup | null {
+  return findGroupWhere(root, (t) => t.fileId === fileId)
 }
 
 export function getFirstGroup(root: LayoutNode): EditorGroup | null {

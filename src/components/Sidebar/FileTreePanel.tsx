@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, memo } from 'react'
+import { useState, useCallback, memo } from 'react'
+import { useLatestRef } from '../../hooks/useLatestRef'
 import { useLayoutContext, useUIDispatch } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
 import { openFileByPath, generateTabId, readDroppedMarkdownFiles } from '../../utils/fileReader'
@@ -9,6 +10,12 @@ import { ChevronDown, ChevronRight, FolderOpen, Folder, FileText, Import } from 
 import { ImportDialog } from './ImportDialog'
 import type { ImportSeed } from './ImportDialog'
 import { ToolbarButton } from '../shared/ToolbarButton'
+import { EMPTY_HINT } from '../shared/classes'
+
+/** 错误信息提取 —— 把底层原因带给用户，而不是笼统的"失败" */
+function errText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
 
 // 目录条目 → 树节点（面板内三处使用，抽为单一实现）
 function entriesToNodes(entries: FileDirEntry[]): FileTreeNode[] {
@@ -104,8 +111,7 @@ export function FileTreePanel() {
   const uiDispatch = useUIDispatch()
   const { openFolderDialog, openFileDialog, readDir, readFile, writeFile, saveFileDialog, isElectron } = useElectronAPI()
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
-  const expandedRef = useRef(expandedDirs)
-  expandedRef.current = expandedDirs
+  const expandedRef = useLatestRef(expandedDirs)
   // keep the module-scope set in sync for the memoized nodes
   expandedChildren.clear()
   for (const p of expandedDirs) expandedChildren.add(p)
@@ -131,9 +137,9 @@ export function FileTreePanel() {
       })
 
       setExpandedDirs(new Set())
-    } catch {
+    } catch (err) {
       layoutDispatch({ type: 'SET_SIDEBAR_LOADING', payload: false })
-      uiDispatch({ type: 'SET_ERROR', payload: 'Failed to open folder.' })
+      uiDispatch({ type: 'SET_ERROR', payload: `打开文件夹失败：${errText(err)}` })
     }
   }, [openFolderDialog, readDir, layoutDispatch, uiDispatch])
 
@@ -159,9 +165,9 @@ export function FileTreePanel() {
         const entries = await readDir(node.path)
         const children = entriesToNodes(entries)
         layoutDispatch({ type: 'SET_CHILDREN', payload: { parentPath: node.path, children } })
-      } catch {
+      } catch (err) {
         layoutDispatch({ type: 'SET_SIDEBAR_LOADING', payload: false })
-        uiDispatch({ type: 'SET_ERROR', payload: `Failed to read directory: ${node.name}` })
+        uiDispatch({ type: 'SET_ERROR', payload: `读取目录失败：${node.name} — ${errText(err)}` })
       }
     }
   }, [readDir, layoutDispatch, uiDispatch])
@@ -171,8 +177,8 @@ export function FileTreePanel() {
       // E6: shared path→OpenFile flow
       const openFile = await openFileByPath(filePath, readFile)
       layoutDispatch({ type: 'OPEN_FILE', payload: { ...openFile, tabId: generateTabId() } })
-    } catch {
-      uiDispatch({ type: 'SET_ERROR', payload: `Failed to open file: ${filePath}` })
+    } catch (err) {
+      uiDispatch({ type: 'SET_ERROR', payload: `打开文件失败：${filePath} — ${errText(err)}` })
     }
   }, [readFile, layoutDispatch, uiDispatch])
 
@@ -181,8 +187,8 @@ export function FileTreePanel() {
       const filePath = await openFileDialog()
       if (!filePath) return
       await handleOpenFile(filePath)
-    } catch {
-      uiDispatch({ type: 'SET_ERROR', payload: 'Failed to open file.' })
+    } catch (err) {
+      uiDispatch({ type: 'SET_ERROR', payload: `打开文件失败：${errText(err)}` })
     }
   }, [openFileDialog, handleOpenFile, uiDispatch])
 
@@ -195,8 +201,8 @@ export function FileTreePanel() {
       if (!filePath) return
       const result = await readFile(filePath)
       setImportSeed({ text: result.content, sourceName: getFileName(filePath) })
-    } catch {
-      uiDispatch({ type: 'SET_ERROR', payload: 'Failed to open file.' })
+    } catch (err) {
+      uiDispatch({ type: 'SET_ERROR', payload: `读取文件失败：${errText(err)}` })
     }
   }, [openFileDialog, readFile, uiDispatch])
 
@@ -205,9 +211,12 @@ export function FileTreePanel() {
     e.preventDefault()
     e.stopPropagation() // 防全局 drop 处理器重复打开 tab
     if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return
-    const opened = await readDroppedMarkdownFiles(Array.from(e.dataTransfer.files), readFile, isElectron)
+    const { opened, errors } = await readDroppedMarkdownFiles(Array.from(e.dataTransfer.files), readFile, isElectron)
     if (opened.length === 0) {
-      uiDispatch({ type: 'SET_ERROR', payload: 'No markdown file found in the dropped items.' })
+      uiDispatch({
+        type: 'SET_ERROR',
+        payload: errors.length > 0 ? errors[0] : 'No markdown file found in the dropped items.',
+      })
       return
     }
     setImportSeed({
@@ -286,12 +295,12 @@ export function FileTreePanel() {
           <div className="px-4 py-2 text-xs text-chrome-text-muted">Loading...</div>
         )}
         {!layoutState.fileTree && !layoutState.sidebarLoading && (
-          <div className="px-4 py-8 text-center text-xs text-chrome-text-faint">
+          <div className={EMPTY_HINT}>
             Open a folder to browse markdown files
           </div>
         )}
         {layoutState.fileTree && layoutState.fileTree.length === 0 && !layoutState.sidebarLoading && (
-          <div className="px-4 py-8 text-center text-xs text-chrome-text-faint">
+          <div className={EMPTY_HINT}>
             No markdown files found in this folder
           </div>
         )}

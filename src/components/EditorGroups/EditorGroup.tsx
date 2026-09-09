@@ -130,9 +130,16 @@ export const EditorGroup = memo(function EditorGroup({ group }: EditorGroupProps
 
     // --- Case 1: External file drop (files in dataTransfer) ---
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      // E7: shared drop pipeline (filter → read → skip failures)
-      const opened = await readDroppedMarkdownFiles(Array.from(e.dataTransfer.files), readFile, isElectron)
-      if (opened.length === 0) return
+      // E7: shared drop pipeline (filter → read → 收集失败原因)
+      const { opened, errors } = await readDroppedMarkdownFiles(Array.from(e.dataTransfer.files), readFile, isElectron)
+      if (opened.length === 0) {
+        // 与全局 drop 行为一致：拖入不支持的文件也要有反馈，而不是毫无反应
+        uiDispatch({
+          type: 'SET_ERROR',
+          payload: errors.length > 0 ? errors[0] : 'No markdown file found in the dropped items.',
+        })
+        return
+      }
 
       // Multi-file → open all in this group, no split regardless of zone
       if (opened.length > 1) {

@@ -59,11 +59,18 @@ export function useDragDrop() {
       const files = e.dataTransfer?.files
       if (!files || files.length === 0) return
 
-      const opened = await readDroppedMarkdownFiles(Array.from(files), readFile, isElectron)
+      const { opened, errors } = await readDroppedMarkdownFiles(Array.from(files), readFile, isElectron)
 
       if (opened.length === 0) {
-        uiDispatch({ type: 'SET_ERROR', payload: 'No markdown file found in the dropped items.' })
+        // 优先展示真实原因（文件过大/无权限），而不是笼统的"没有 markdown 文件"
+        uiDispatch({
+          type: 'SET_ERROR',
+          payload: errors.length > 0 ? errors[0] : 'No markdown file found in the dropped items.',
+        })
         return
+      }
+      if (errors.length > 0) {
+        uiDispatch({ type: 'SET_ERROR', payload: `${errors.length} 个文件未能打开：${errors[0]}` })
       }
 
       for (const openFile of opened) {

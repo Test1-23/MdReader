@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   createConversation, addUserNode, addAssistantNode, switchBranch,
-  getPath, getAssistantReply, replaceAssistantReply, buildMessages,
+  getPath, getAssistantReply, replaceAssistantReply,
   normalizeConversation, appendAssistantContent,
 } from '../conversationTree'
+import { buildMessages } from '../chatPrompt'
 
 function setup() {
   let conv = createConversation('test')

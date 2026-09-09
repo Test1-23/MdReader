@@ -3,6 +3,7 @@ import type { LayoutState, LayoutAction, UIState, UIAction, UIStateView, AIChatS
 import {
   findGroup,
   findGroupContainingTab,
+  findTab,
   findSplit,
   transformNode,
   getActiveTab,
@@ -37,6 +38,12 @@ const initialLayout: LayoutState = {
   openFiles: {},
 }
 
+/** 类型安全的删键（替代 `as Record<string, unknown>` 双重断言） */
+function omitKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  const { [key]: _removed, ...rest } = record
+  return rest
+}
+
 function applyLayoutResult(state: LayoutState, result: LayoutResult): LayoutState {
   // P4: a no-op result (validation rejected, or nothing actually changed)
   // must return the same state reference — otherwise every consumer of
@@ -58,8 +65,7 @@ function applyLayoutResult(state: LayoutState, result: LayoutResult): LayoutStat
   }
   if (hasRemoves) {
     for (const id of result.openFilesToRemove!) {
-      const { [id]: _, ...rest } = openFiles as Record<string, unknown>
-      openFiles = rest as unknown as typeof openFiles
+      openFiles = omitKey(openFiles, id)
     }
   }
 
@@ -67,8 +73,7 @@ function applyLayoutResult(state: LayoutState, result: LayoutResult): LayoutStat
   let lastAiTabId = state.lastAiTabId
   let lastFileGroupId = state.lastFileGroupId
   if (result.layoutRoot && result.activeTabId) {
-    const activeGroup = findGroupContainingTab(result.layoutRoot, result.activeTabId)
-    const activeTab = activeGroup?.tabs.find((t) => t.id === result.activeTabId)
+    const activeTab = findTab(result.layoutRoot, result.activeTabId)
     if (activeTab?.fileId === AI_WINDOW_ID) {
       lastAiTabId = activeTab.id
     } else if (result.activeGroupId) {

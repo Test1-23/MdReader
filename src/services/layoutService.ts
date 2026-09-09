@@ -4,6 +4,7 @@ import {
   findGroup,
   findGroupContainingTab,
   findGroupContainingFileId,
+  findTab,
   getFirstGroup,
   getActiveTab,
   createDefaultLayout,
@@ -216,7 +217,7 @@ function handleOpenAiWindow(state: LayoutState): LayoutResult {
   // 1a. 多窗口语义：优先聚焦"最近聚焦过的 AI 窗口"
   if (state.layoutRoot && state.lastAiTabId) {
     const lastGroup = findGroupContainingTab(state.layoutRoot, state.lastAiTabId)
-    const lastTab = lastGroup?.tabs.find((t) => t.id === state.lastAiTabId)
+    const lastTab = findTab(state.layoutRoot, state.lastAiTabId)
     if (lastGroup && lastTab && lastTab.fileId === AI_WINDOW_ID) {
       return focusAiTab(state, lastGroup, lastTab)
     }

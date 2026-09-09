@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLatestRef } from './useLatestRef'
 import type { Conversation } from '../utils/conversationTree'
 import {
   getAssistantReply, replaceAssistantReply, addAssistantNode,
-  appendAssistantContent, appendAssistantReasoning, buildMessages,
+  appendAssistantContent, appendAssistantReasoning,
 } from '../utils/conversationTree'
+import { buildMessages } from '../utils/chatPrompt'
 import type { ChatRequestConfig } from '../types/ipc'
 
 export type ConvUpdater = Conversation | ((prev: Conversation) => Conversation)
@@ -45,18 +47,13 @@ export function useAiStream({ setConv, getConfig, getDocContent, onStopped }: Us
   const [streaming, setStreaming] = useState(false)
   const requestIdRef = useRef<string | null>(null)
   const reasoningStartRef = useRef(0)
-  const setConvRef = useRef(setConv)
-  const getConfigRef = useRef(getConfig)
-  const getDocContentRef = useRef(getDocContent)
-  const onStoppedRef = useRef(onStopped)
+  const setConvRef = useLatestRef(setConv)
+  const getConfigRef = useLatestRef(getConfig)
+  const getDocContentRef = useLatestRef(getDocContent)
+  const onStoppedRef = useLatestRef(onStopped)
   const latestConvRef = useRef<Conversation | null>(null)
   const pendingRef = useRef<PendingDeltas>({ content: '', reasoning: '' })
   const scheduledRef = useRef(false)
-
-  useEffect(() => { setConvRef.current = setConv }, [setConv])
-  useEffect(() => { getConfigRef.current = getConfig }, [getConfig])
-  useEffect(() => { getDocContentRef.current = getDocContent }, [getDocContent])
-  useEffect(() => { onStoppedRef.current = onStopped }, [onStopped])
 
   const applyDeltas = useCallback((userNodeId: string, streamConvId: string) => {
     const { content, reasoning } = pendingRef.current

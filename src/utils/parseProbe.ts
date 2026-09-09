@@ -15,7 +15,3 @@ export function bumpParseCount(): void {
   }
 }
 
-/** 当前进程内的解析次数（测试用） */
-export function readParseCount(): number {
-  return count
-}
