@@ -25,6 +25,12 @@ describe('extractHeadings', () => {
     const headings = extractHeadings('```\n```\n# real\n~~~\n# fake\n~~~\n## real2')
     expect(headings.map((h) => h.text)).toEqual(['real', 'real2'])
   })
+
+  it('normalizes inline HTML and escapes in heading text', () => {
+    expect(extractHeadings('## HTML <span class="x">hi</span>')[0].text).toBe('HTML hi')
+    expect(extractHeadings('## A\\nB')[0].text).toBe('A B')
+    expect(extractHeadings('## A<br>B')[0].text).toBe('A B')
+  })
 })
 
 describe('generateFileId', () => {
@@ -45,6 +51,20 @@ describe('headingToId', () => {
     expect(headingToId('[Title](https://example.com)')).toBe('title')
     expect(headingToId('`code` span')).toBe('code-span')
     expect(headingToId('Hello  World')).toBe('hello-world')
+  })
+
+  it('normalizes inline HTML so the anchor id matches the rendered heading', () => {
+    expect(headingToId('HTML <span class="x">hi</span>')).toBe('html-hi')
+    expect(headingToId('A<b>x</b> B')).toBe('ax-b')
+  })
+
+  it('treats <br> and a literal \\n escape as separators (matching the rendered path)', () => {
+    // '\\n' here is the two-character escape (backslash + n), not a newline
+    expect(headingToId('A<br>B')).toBe('a-b')
+    expect(headingToId('A<BR/>B')).toBe('a-b')
+    expect(headingToId('A\\nB')).toBe('a-b')
+    // rendered path yields 'A \nB' for the escape (break → <br> + newline sibling)
+    expect(headingToId('A \nB')).toBe(headingToId('A\\nB'))
   })
 })
 

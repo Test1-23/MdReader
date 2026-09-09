@@ -13,6 +13,8 @@
   E=mc^2
   $$
   ```
+- **Inline HTML** — raw HTML in markdown renders as real elements (`<br>`, `<span style="...">`, `<div>`, `<b>`, …)
+- **Literal `\n` escapes** — a two-character `\n` in the text renders as a line break; code blocks, inline code and math are left untouched (soft line breaks keep the CommonMark behavior)
 - Syntax highlighting for code blocks via Prism.js
 - Document outline with click-to-scroll heading navigation
 - Raw source view with line numbers
@@ -65,7 +67,7 @@
 | UI Framework | React 18 + TypeScript |
 | Build Tool | Vite 6 |
 | CSS | Tailwind CSS 3 |
-| Markdown | react-markdown + remark-gfm |
+| Markdown | react-markdown + remark-gfm + rehype-raw |
 | Math | remark-math + rehype-katex + KaTeX |
 | Syntax Highlight | react-syntax-highlighter + Prism.js |
 | Split Panes | Allotment |

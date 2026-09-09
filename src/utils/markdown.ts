@@ -21,8 +21,9 @@ export function extractHeadings(content: string): Heading[] {
     if (match) {
       headings.push({
         level: match[1].length,
-        // B19e: strip trailing closing hashes (`## Title ##` → `Title`)
-        text: match[2].trim().replace(/\s+#+\s*$/, ''),
+        // B19e: strip trailing closing hashes (`## Title ##` → `Title`);
+        // 归一化 HTML/转义符，使大纲 id 与渲染锚点 id 一致
+        text: normalizeHeadingText(match[2].trim().replace(/\s+#+\s*$/, '')),
         line: i,
       })
     }
@@ -64,9 +65,23 @@ export function isMarkdownFile(name: string): boolean {
   return isMarkdownExtension(name.slice(dot))
 }
 
+/**
+ * Normalize raw heading source so its id matches the rendered heading's id.
+ * Raw HTML tags become elements (their text content stays), and a literal
+ * two-char `\n` escape becomes a <br> — both act as word separators, which is
+ * what the rendered path produces too (mdast `break` emits <br> plus a newline
+ * text sibling).
+ */
+function normalizeHeadingText(text: string): string {
+  return text
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\\n/g, ' ')
+}
+
 /** Strip inline markdown syntax so raw heading text matches rendered text */
 function stripInlineMarkdown(text: string): string {
-  return text
+  return normalizeHeadingText(text)
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/[*_~`]/g, '')

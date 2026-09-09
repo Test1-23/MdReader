@@ -372,7 +372,7 @@ async function main(): Promise<void> {
     // drag-drop a markdown File onto the window — the real useDragDrop pipeline
     const dropped = await run<boolean>(`
       (() => {
-        const file = new File(['# Smoke Heading\\n\\nBody **bold** text.\\n\\nInline math $x^2$ and block:\\n\\n$$\\nE=mc^2\\n$$\\n'], 'smoke-drop.md', { type: 'text/markdown' })
+        const file = new File(['# Smoke Heading\\n\\nBody **bold** text.\\n\\nInline math $x^2$ and block:\\n\\n$$\\nE=mc^2\\n$$\\n\\n## HTML <span class="html-test" style="color: red">hi</span>\\n\\n<div class="html-block">raw <b>bold</b></div>\\n\\nEscape\\\\nbreak here\\n\\nRaw br: A<br>B\\n\\n~~~text\\ncode \\\\n stays\\n~~~\\n'], 'smoke-drop.md', { type: 'text/markdown' })
         const dt = new DataTransfer()
         dt.items.add(file)
         const opts = { bubbles: true, cancelable: true, dataTransfer: dt }
@@ -393,8 +393,48 @@ async function main(): Promise<void> {
     const inlineMath = await run<boolean>(`document.querySelector('.markdown-body .katex') !== null`)
     check('inline math rendered with KaTeX', inlineMath === true)
     const blockMath = await run<boolean>(`document.querySelector('.markdown-body .katex-display') !== null`)
-    const blockProbe = await run<string>(`(document.querySelector('.markdown-body')?.innerHTML ?? 'NODOM').slice(-1500)`)
-    check('block math rendered with KaTeX', blockMath === true, blockProbe)
+    check('block math rendered with KaTeX', blockMath === true)
+
+    // ---- inline HTML via rehype-raw ----
+    const htmlInline = await run<boolean>(
+      `document.querySelector('.markdown-body .html-test')?.textContent === 'hi'`)
+    check('inline HTML rendered as a real element', htmlInline === true)
+    const htmlStyle = await run<string>(
+      `document.querySelector('.markdown-body .html-test')?.style.color ?? 'NONE'`)
+    check('raw style attribute converted to a React style object', htmlStyle === 'red', htmlStyle)
+    const htmlBlock = await run<boolean>(
+      `document.querySelector('.markdown-body div.html-block b')?.textContent === 'bold'`)
+    check('block HTML rendered as elements', htmlBlock === true)
+    const htmlHeadingId = await run<boolean>(`document.querySelector('h2#html-hi') !== null`)
+    check('heading with inline HTML gets the tag-stripped anchor id', htmlHeadingId === true)
+
+    // ---- literal two-char \n escape → <br>, except inside code ----
+    // String.fromCharCode(92) avoids backslash-escaping ambiguity across layers
+    const ESC_EXPR = `String.fromCharCode(92)+'n'`
+    const escapeProbe = await run<string>(`
+      (() => {
+        const p = [...document.querySelectorAll('.markdown-body p')].find(el => el.textContent.includes('Escape'))
+        if (!p) return 'NO-PARA'
+        return JSON.stringify({
+          brs: p.querySelectorAll('br').length,
+          hasLiteral: p.textContent.includes(${ESC_EXPR}),
+          tail: p.textContent.includes('break here'),
+        })
+      })()`)
+    const escape = JSON.parse(escapeProbe) as { brs: number; hasLiteral: boolean; tail: boolean }
+    check('literal \\n renders as a break, not text',
+      escape.brs === 1 && escape.hasLiteral === false && escape.tail === true, escapeProbe)
+
+    const rawBr = await run<number>(`
+      (() => {
+        const p = [...document.querySelectorAll('.markdown-body p')].find(el => el.textContent.includes('Raw br'))
+        return p ? p.querySelectorAll('br').length : -1
+      })()`)
+    check('raw <br> renders as a break', rawBr === 1, rawBr)
+
+    const codeKeepsEscape = await run<boolean>(
+      `document.querySelector('.markdown-body code')?.textContent.includes(${ESC_EXPR}) === true`)
+    check('literal \\n preserved inside a code block', codeKeepsEscape === true)
 
     // ---- new interaction: selection shows an inline input box, does NOT auto-open AI ----
     // (selectNode runs in the RENDERER — kept as a string so the main process

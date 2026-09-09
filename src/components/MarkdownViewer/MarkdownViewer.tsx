@@ -2,8 +2,10 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
+import rehypeRaw from 'rehype-raw'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
+import remarkBreakEscapes from './remarkBreakEscapes'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useUIContext, useLayoutDispatch, useUIDispatch } from '../../context/AppContext'
@@ -18,9 +20,11 @@ interface MarkdownViewerProps {
 }
 
 // Stable identity across renders — an inline array would defeat memoization.
-// remark-math 解析 $...$ 行内 / $$...$$ 块级数学，rehype-katex 渲染为 KaTeX。
-const REMARK_PLUGINS = [remarkGfm, remarkMath]
-const REHYPE_PLUGINS = [rehypeKatex]
+// remark-math 解析 $...$ 行内 / $$...$$ 块级数学，rehype-katex 渲染为 KaTeX；
+// remarkBreakEscapes 把字面 `\n` 转为换行；rehype-raw 支持内联 HTML。
+// 顺序不可换：rehype-raw 会用 parse5 重解析整棵树，必须在 rehype-katex 之前。
+const REMARK_PLUGINS = [remarkGfm, remarkMath, remarkBreakEscapes]
+const REHYPE_PLUGINS = [rehypeRaw, rehypeKatex]
 
 // ---- Module-level renderers (stable identity, no closure re-creation) ----
 
@@ -28,6 +32,8 @@ function extractText(node: unknown): string {
   if (typeof node === 'string') return node
   if (Array.isArray(node)) return node.map(extractText).join('')
   if (node && typeof node === 'object' && 'props' in node) {
+    // <br> 是分隔符（与大纲侧的 normalizeHeadingText 归一化一致）
+    if ((node as { type?: string }).type === 'br') return ' '
     return extractText((node as any).props.children)
   }
   return ''
@@ -121,7 +127,11 @@ function InputRenderer({ type, checked, ...props }: any) {
       />
     )
   }
-  return <input type={type} checked={checked} {...props} />
+  // checked 只对 checkbox/radio 有意义 —— 其余类型透传会触发 React 警告
+  if (type === 'radio') {
+    return <input type="radio" checked={checked} readOnly {...props} />
+  }
+  return <input type={type} {...props} />
 }
 
 function BlockquoteRenderer({ children, ...props }: any) {
