@@ -9,6 +9,7 @@ import { useAiStream } from '../../hooks/useAiStream'
 import type { ConvUpdater } from '../../hooks/useAiStream'
 import { useDebouncedPersist } from '../../hooks/useDebouncedPersist'
 import { useLatestRef } from '../../hooks/useLatestRef'
+import { useElectronAPI } from '../../hooks/useElectronAPI'
 import { persistConversation, loadValidatedConversation } from '../../utils/conversationPersistence'
 import { reportError } from '../../utils/errorReporting'
 import { VIEW_BTN_INACTIVE } from '../shared/classes'
@@ -32,6 +33,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const { state: uiState } = useUIContext()
   const { state: aiState, dispatch: aiDispatch } = useAIContext()
   const { state: layoutState, dispatch: layoutDispatch } = useLayoutContext()
+  const { isElectron, listConversations, deleteConversation } = useElectronAPI()
   const [viewMode, setViewMode] = useState<ChatViewMode>('chat')
   const deepThinkRef = useRef(false)
 
@@ -222,10 +224,11 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   }, [])
 
   const refreshList = useCallback(() => {
-    window.electronAPI?.listConversations()?.then((list) => {
+    if (!isElectron) return
+    listConversations().then((list) => {
       aiDispatch({ type: 'SET_CONVERSATION_LIST', payload: list })
     }).catch((err: unknown) => reportError('读取对话列表失败', err))
-  }, [aiDispatch])
+  }, [aiDispatch, isElectron, listConversations])
 
   const handleNewChat = useCallback(() => {
     stream.stop()
@@ -272,7 +275,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
   const handleDeleteConversation = useCallback(async (id: string) => {
     if (convRef.current.id === id) stream.stop()
     try {
-      await window.electronAPI?.deleteConversation(id)
+      if (isElectron) await deleteConversation(id)
     } catch (err: unknown) {
       // 删除失败必须可见 —— 否则用户以为删掉了，刷新后对话又回来了
       reportError(`删除对话失败：${err instanceof Error ? err.message : String(err)}`, err)
@@ -285,7 +288,7 @@ export function AIChatPanel({ tabId }: AIChatPanelProps) {
       setViewMode('chat')
     }
     refreshList()
-  }, [aiDispatch, refreshList, stream])
+  }, [aiDispatch, deleteConversation, isElectron, refreshList, stream])
 
   return (
     <div className="h-full flex flex-col bg-chrome-surface">

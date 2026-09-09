@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useUIContext } from '../../context/AppContext'
 import { useElectronAPI } from '../../hooks/useElectronAPI'
+import { reportError } from '../../utils/errorReporting'
 import { Check } from 'lucide-react'
 
 export function SettingsPanel() {
   const { state, dispatch } = useUIContext()
-  const { isElectron } = useElectronAPI()
+  const { isElectron, saveApiConfig, clearApiConfig } = useElectronAPI()
   const [endpoint, setEndpoint] = useState(state.apiEndpoint)
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState(state.apiModel)
@@ -29,8 +30,12 @@ export function SettingsPanel() {
   const handleSave = async () => {
     // Empty key input = keep the stored key (the renderer can never read it back)
     const config = { endpoint, apiKey, model }
-    if (isElectron && window.electronAPI) {
-      await window.electronAPI.saveApiConfig(config)
+    try {
+      if (isElectron) await saveApiConfig(config)
+    } catch (err) {
+      // 保存失败必须可见 —— 否则用户以为保存成功，重启后配置全无
+      reportError(`保存设置失败：${err instanceof Error ? err.message : String(err)}`, err)
+      return
     }
     dispatch({ type: 'SETTINGS_UPDATE', payload: { endpoint, model, hasKey: hasKey || !!apiKey } })
     setHasKey(hasKey || !!apiKey)
@@ -39,8 +44,11 @@ export function SettingsPanel() {
   }
 
   const handleClear = async () => {
-    if (isElectron && window.electronAPI) {
-      await window.electronAPI.clearApiConfig()
+    try {
+      if (isElectron) await clearApiConfig()
+    } catch (err) {
+      reportError(`清除设置失败：${err instanceof Error ? err.message : String(err)}`, err)
+      return
     }
     setEndpoint('')
     setApiKey('')
